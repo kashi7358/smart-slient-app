@@ -6,3 +6,4 @@ then i went back to 4 april's push in github(version: 1.0.6+7) made a clone work
 now for pulling => git pull origin new-branch-name
 now for pushing => git push origin new-branch-name
   -->"# smart-slient-app" 
+"# smart-silent-" 
