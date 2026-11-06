@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/View/on_bording.dart';
 import 'package:smart_silent/View/tab_bar.dart';
@@ -32,23 +32,30 @@ void main() async {
   await Hive.openBox<NemazModel>("nemaz");
 
   await AndroidAlarmManager.initialize();
-  
-  final prefs = await SharedPreferences.getInstance();
-  final showHome = prefs.getBool('showHome') ?? false;
-  final dndGranted = (await PermissionHandler.permissionsGranted) ?? false;
 
-  // Agar DND permission OFF hai, to lazmi Onboarding screen show hogi
-  final bool shouldShowHome = showHome && dndGranted;
+  // Check DND permission with a quick timeout so app never hangs on logo/splash
+  bool isDndGranted = false;
+  try {
+    isDndGranted = (await PermissionHandler.permissionsGranted.timeout(
+          const Duration(milliseconds: 600),
+          onTimeout: () => false,
+        )) ??
+        false;
+  } catch (_) {
+    isDndGranted = false;
+  }
 
-  runApp(MyApp(showHome: shouldShowHome));
+  // Jab tak permission allow nahi hogi, OnBordingScreen dikhayenge
+  runApp(MyApp(showHome: isDndGranted));
 }
 
 class MyApp extends StatelessWidget {
-  final bool showHome;
-  const MyApp({Key? key, required this.showHome}) : super(key: key);
+  final bool? showHome;
+  const MyApp({Key? key, this.showHome}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final bool shouldShowHome = showHome ?? false;
     return ChangeNotifierProvider(
       create: (_) => CountProvider(),
       child: MaterialApp(
@@ -56,7 +63,8 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           primarySwatch: Colors.purple,
         ),
-        home: showHome ? const TabBarDemo() : const OnBordingScreen(),
+        // Direct home assignment guarantees frame 1 render without hanging
+        home: shouldShowHome ? const TabBarDemo() : const OnBordingScreen(),
         debugShowCheckedModeBanner: false,
       ),
     );

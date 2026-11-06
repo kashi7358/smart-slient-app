@@ -1,459 +1,533 @@
-import 'package:day_picker/day_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/repeated_model.dart';
 
 import '../Boxes/boxes.dart';
 
 class CreateDaily extends StatefulWidget {
-  CreateDaily({super.key});
+  const CreateDaily({super.key});
 
   @override
   State<CreateDaily> createState() => _CreateDailyState();
 }
 
 class _CreateDailyState extends State<CreateDaily> {
-  final nameController = TextEditingController();
-  bool isSelect = false;
-  DateTime startDateTime = DateTime.now();
-  DateTime endDateTime = DateTime.now();
-  bool isTaskActivated = false;
+  final TextEditingController nameController = TextEditingController();
+
+  // Mode: false = Silent, true = Vibrate
+  bool isVibrateMode = false;
+
+  TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay endTime = const TimeOfDay(hour: 10, minute: 30);
+
+  // Selected day indices (0 = Sun, 1 = Mon, ..., 6 = Sat)
+  // Default to weekdays: Mon, Tue, Wed, Thu, Fri
+  final Set<int> _selectedDays = {1, 2, 3, 4, 5};
+
+  final List<Map<String, dynamic>> _daysConfig = const [
+    {'label': 'Sun', 'index': 0},
+    {'label': 'Mon', 'index': 1},
+    {'label': 'Tue', 'index': 2},
+    {'label': 'Wed', 'index': 3},
+    {'label': 'Thu', 'index': 4},
+    {'label': 'Fri', 'index': 5},
+    {'label': 'Sat', 'index': 6},
+  ];
+
   late BannerAd _bannerAd;
   bool isAdLoaded = false;
 
-  initBannerAd() {
-    var AdsIdd = 'ca-app-pub-9923979057032791/3153557586';
+  void initBannerAd() {
+    const adsId = 'ca-app-pub-9923979057032791/3153557586';
     _bannerAd = BannerAd(
-        size: AdSize.banner,
-        adUnitId: AdsIdd,
-        listener: BannerAdListener(
-          onAdLoaded: (ad) {
-            setState(() {
-              isAdLoaded = true;
-            });
-          },
-          onAdFailedToLoad: (ad, error) {},
-        ),
-        request: AdRequest());
+      size: AdSize.banner,
+      adUnitId: adsId,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (mounted) setState(() => isAdLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) {},
+      ),
+      request: const AdRequest(),
+    );
     _bannerAd.load();
   }
 
   @override
   void initState() {
-    print("khan${startDateTime}");
-    initBannerAd();
-    // TODO: implement initState
     super.initState();
+    initBannerAd();
   }
 
-  List<int> SelectedDays = List.empty(growable: true);
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
 
-  List<DayInWeek> _days = [
-    DayInWeek(
-      "Mon",
-    ),
-    DayInWeek(
-      "Tue",
-    ),
-    DayInWeek(
-      "Wed",
-    ),
-    DayInWeek(
-      "Thur",
-    ),
-    DayInWeek(
-      "Fri",
-    ),
-    DayInWeek("Sat"),
-    DayInWeek("Sun"),
-  ];
+  Future<TimeOfDay?> _pickTime(TimeOfDay initialTime) async {
+    return await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF389EB4),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
 
-  List<String> SelectedDaysIn = List.empty(growable: true);
+  String _formatTime(TimeOfDay time) {
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
+  Future<void> _saveSchedule() async {
+    final name = nameController.text.trim();
+    if (name.isEmpty) {
+      Fluttertoast.showToast(msg: "Please enter a meeting or schedule name");
+      return;
+    }
+
+    if (_selectedDays.isEmpty) {
+      Fluttertoast.showToast(msg: "Please select at least one day");
+      return;
+    }
+
+    final now = DateTime.now();
+    final startDateTime = DateTime(now.year, now.month, now.day, startTime.hour, startTime.minute);
+    final endDateTime = DateTime(now.year, now.month, now.day, endTime.hour, endTime.minute);
+
+    final data = RepeatedModel(
+      name: name,
+      Start: startDateTime,
+      End: endDateTime,
+      isSilentOrVibration: isVibrateMode,
+      isTaskActivated: true,
+      dayInWeek: _selectedDays.toList()..sort(),
+    );
+
+    final box = Boxes.getDataforDaily();
+    await box.add(data);
+
+    if (mounted) {
+      Fluttertoast.showToast(
+        msg: "Meeting Schedule Saved Successfully!",
+        backgroundColor: const Color(0xFF389EB4),
+        textColor: Colors.white,
+      );
+      Navigator.pop(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final startHour = startDateTime.hour.toString().padLeft(2, '0');
-    final startMinute = startDateTime.minute.toString().padLeft(2, '0');
-
-    final endhour = endDateTime.hour.toString().padLeft(2, '0');
-    final endminute = endDateTime.minute.toString().padLeft(2, '0');
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Create Daily Schedule"),
-        backgroundColor: AppColors.kSecondary,
-        foregroundColor: AppColors.kPrimary,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        child: Stack(
-          children: [
-            Container(
-              child: ListView(
-                children: [
-                  Container(
-                    margin: EdgeInsets.all(12),
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.kSecondary,
-                      borderRadius: BorderRadius.circular(29),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0.5,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Create Meeting Schedule',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Meeting Title
+              const Text(
+                'Meeting / Task Name',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0D000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
                     ),
-                    child: TextFormField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                          hintText: "Enter Task Name",
-                          border: InputBorder.none),
-                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: nameController,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
                   ),
-                  InkWell(
-                    onTap: () async {
-                      // pickStartDateAndTime();
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.business_center_outlined, color: Color(0xFF389EB4), size: 22),
+                    hintText: 'e.g., Weekly Team Sync, Class, Gym',
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.normal,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  ),
+                ),
+              ),
 
-                      pickEveryThing();
-                    },
-                    child: Container(
-                      height: MediaQuery.of(context).size.height / 15,
-                      margin: EdgeInsets.all(12),
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        color: AppColors.kSecondary,
-                        borderRadius: BorderRadius.circular(29),
-                      ),
-                      child: Row(
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Start Time: ${startHour}:$startMinute"),
-                            ],
-                          ),
-                          Spacer(),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Icon(
-                                Icons.alarm_add,
-                                color: AppColors.kPrimary,
-                              )
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () async {
-                      pickEndDateAndTime();
-                    },
-                    child: Container(
-                      height: MediaQuery.of(context).size.height / 15,
-                      margin: EdgeInsets.all(12),
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        color: AppColors.kSecondary,
-                        borderRadius: BorderRadius.circular(29),
-                      ),
-                      child: Row(
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("End Time: ${endhour}:${endminute} "),
-                            ],
-                          ),
-                          Spacer(),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Icon(
-                                Icons.alarm_add,
-                                color: AppColors.kPrimary,
-                              )
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: SelectWeekDays(
-                      // fontSize: 14,
-                      unSelectedDayTextColor: Colors.black,
-                      fontWeight: FontWeight.w500,
-                      days: _days,
-                      daysFillColor:  AppColors.kPrimary,
-                      selectedDayTextColor: AppColors.kbg,
-                     
-                      border: false,
-                      boxDecoration: BoxDecoration(
-                        color: AppColors.kSecondary,
-                        borderRadius: BorderRadius.circular(30.0),
-                      ),
-                      onSelect: (values) {
-                        print("my values: ${values}");
-                        SelectedDaysIn = values;
-                        // setState(() {
-                        //   string = values;
-                        // });
-                        print(":::${SelectedDaysIn}");
+              const SizedBox(height: 22),
+
+              // Time Selection (Start & End)
+              const Text(
+                'Schedule Timings',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  // Start Time
+                  Expanded(
+                    child: _buildTimePickerCard(
+                      label: 'Start Time',
+                      time: startTime,
+                      onTap: () async {
+                        final res = await _pickTime(startTime);
+                        if (res != null) setState(() => startTime = res);
                       },
                     ),
                   ),
-                  Container(
-                    height: MediaQuery.of(context).size.height / 15,
-                    margin: EdgeInsets.all(12),
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.kSecondary,
-                      borderRadius: BorderRadius.circular(29),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Silent Mode"),
-                            SizedBox(
-                              height: 2,
-                            ),
-                            Text("Phone will Automatically Silent"),
-                          ],
-                        ),
-                        Spacer(),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Switch(
-                              value: !isSelect,
-                              onChanged: (value) {
-                                setState(() {
-                                  isSelect = !value;
-                                });
-                              },
-                              activeTrackColor:
-                                  Color.fromARGB(255, 133, 104, 173),
-                              activeColor: AppColors.kPrimary,
-                            )
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    height: MediaQuery.of(context).size.height / 15,
-                    margin: EdgeInsets.all(12),
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.kSecondary,
-                      borderRadius: BorderRadius.circular(29),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Vibrate Mode"),
-                            SizedBox(
-                              height: 2,
-                            ),
-                            Text("Phone will Automatically Vibrate"),
-                          ],
-                        ),
-                        Spacer(),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Switch(
-                              value: isSelect,
-                              onChanged: (value) {
-                                setState(() {
-                                  isSelect = value;
-                                  print(isSelect);
-                                });
-                              },
-                              activeTrackColor:
-                                  Color.fromARGB(255, 133, 104, 173),
-                              activeColor: AppColors.kPrimary,
-                            )
-                          ],
-                        ),
-                      ],
+                  const SizedBox(width: 12),
+                  // End Time
+                  Expanded(
+                    child: _buildTimePickerCard(
+                      label: 'End Time',
+                      time: endTime,
+                      onTap: () async {
+                        final res = await _pickTime(endTime);
+                        if (res != null) setState(() => endTime = res);
+                      },
                     ),
                   ),
                 ],
               ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: GestureDetector(
-                  onTap: () {
-                    /////////////////
 
-                    for (var i = 0; i < SelectedDaysIn.length; i++) {
-                      switch (SelectedDaysIn[i]) {
-                        case "Sun":
-                          SelectedDays.add(0);
-                          break;
-                        case "Mon":
-                          SelectedDays.add(1);
-                          break;
-                        case "Tue":
-                          SelectedDays.add(2);
-                          break;
-                        case "Wed":
-                          SelectedDays.add(3);
-                          break;
-                        case "Thur":
-                          SelectedDays.add(4);
-                          break;
-                        case "Fri":
-                          SelectedDays.add(5);
-                          break;
-                        case "Sat":
-                          SelectedDays.add(6);
-                          break;
-                        default:
-                          break;
-                      }
-                      //SelectedDays.add(i);
-                      //print("Index : ${SelectedDays[i]}");
-                    }
+              const SizedBox(height: 22),
 
-                    for (var i = 0; i < SelectedDays.length; i++) {
-                      print("Index : ${SelectedDays[i]}");
-                    }
-
-                    /////////////////////
-
-                    final data = RepeatedModel(
-                      name: nameController.text.isEmpty
-                          ? "Daily"
-                          : nameController.text,
-                      Start: DateTime(startDateTime.year, startDateTime.month, startDateTime.day, startDateTime.hour, startDateTime.minute),
-                      End: DateTime(endDateTime.year, endDateTime.month, endDateTime.day, endDateTime.hour, endDateTime.minute),
-                      isSilentOrVibration: isSelect,
-                      isTaskActivated: isTaskActivated,
-                      dayInWeek: SelectedDays
+              // Repeat Days
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Repeat Days',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (_selectedDays.length == 7) {
+                          _selectedDays.clear();
+                        } else {
+                          _selectedDays.addAll([0, 1, 2, 3, 4, 5, 6]);
+                        }
+                      });
+                    },
+                    child: Text(
+                      _selectedDays.length == 7 ? 'Clear All' : 'Select All',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF389EB4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0D000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: _daysConfig.map((day) {
+                    final isSelected = _selectedDays.contains(day['index']);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedDays.remove(day['index']);
+                          } else {
+                            _selectedDays.add(day['index']);
+                          }
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF389EB4).withOpacity(0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            day['label'],
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : const Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                      ),
                     );
-                    final box = Boxes.getDataforDaily();
-                    box.add(data);
-                    nameController.clear();
-                    Navigator.of(context).pop();
-                  },
-                  child: Container(
-                    width: MediaQuery.of(context).size.width / 1.4,
-                    height: MediaQuery.of(context).size.height / 15,
-                    decoration: BoxDecoration(
-                        color: AppColors.kPrimary,
-                        borderRadius: BorderRadius.circular(29)),
-                    child: Center(
-                        child: Text(
-                      "SAVE",
+                  }).toList(),
+                ),
+              ),
+
+              const SizedBox(height: 22),
+
+              // Silent / Vibrate Mode
+              const Text(
+                'Sound Mode',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Silent Toggle
+              _buildModeToggle(
+                title: 'Silent Mode',
+                subtitle: 'Phone will automatically be Silent',
+                value: !isVibrateMode,
+                onChanged: (val) => setState(() => isVibrateMode = !val),
+              ),
+              const SizedBox(height: 10),
+
+              // Vibrate Toggle
+              _buildModeToggle(
+                title: 'Vibrate Mode',
+                subtitle: 'Phone will automatically Vibrate',
+                value: isVibrateMode,
+                onChanged: (val) => setState(() => isVibrateMode = val),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Save Button
+              GestureDetector(
+                onTap: _saveSchedule,
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF389EB4),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF389EB4).withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Save Meeting Schedule',
                       style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.kbg),
-                    )),
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            )
-          ],
+
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
+        bottomNavigationBar: isAdLoaded
+            ? Container(
+                decoration: const BoxDecoration(color: Colors.transparent),
+                height: _bannerAd.size.height.toDouble(),
+                width: _bannerAd.size.width.toDouble(),
+                child: AdWidget(ad: _bannerAd),
+              )
+            : const SizedBox.shrink(),
       ),
-      bottomNavigationBar: isAdLoaded
-          ? Container(
-              decoration: BoxDecoration(color: Colors.transparent),
-              height: _bannerAd.size.height.toDouble(),
-              width: _bannerAd.size.width.toDouble(),
-              child: AdWidget(ad: _bannerAd),
-            )
-          : SizedBox(),
     );
   }
 
-  Future<DateTime?> pickStartDate() => showDatePicker(
-      helpText: 'Select Start Date',
-      context: context,
-      initialDate: startDateTime,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100));
-
-  Future<TimeOfDay?> pickStartTime() => showTimePicker(
-      helpText: 'Select Start Time',
-      context: context,
-      initialTime:
-          TimeOfDay(hour: startDateTime.hour, minute: startDateTime.minute));
-
-  Future<void> pickEveryThing() async {
-    DateTime? date = DateTime.now();
-    if (date == null) return;
-
-    TimeOfDay? time = await pickStartTime();
-    if (time == null) return;
-
-    var datetime =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    setState(() {
-      startDateTime = datetime;
-    });
-    pickEndDateAndTime();
+  Widget _buildTimePickerCard({
+    required String label,
+    required TimeOfDay time,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0D000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _formatTime(time),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const Icon(Icons.access_time_rounded, color: Color(0xFF389EB4), size: 20),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Future<void> pickStartDateAndTime() async {
-    DateTime? date = await pickStartDate();
-    if (date == null) return;
-
-    TimeOfDay? time = await pickStartTime();
-    if (time == null) return;
-
-    var datetime =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    setState(() {
-      startDateTime = datetime;
-    });
+  Widget _buildModeToggle({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: const Color(0xFF389EB4),
+            activeTrackColor: const Color(0xFF389EB4).withOpacity(0.35),
+          ),
+        ],
+      ),
+    );
   }
-  // ENd time and date Code
-
-  Future<DateTime?> pickEndDate() => showDatePicker(
-      helpText: 'Select End Date',
-      context: context,
-      initialDate: endDateTime,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100));
-
-  Future<TimeOfDay?> pickEndTime() => showTimePicker(
-      helpText: 'Select End Time',
-      context: context,
-      initialTime:
-          TimeOfDay(hour: endDateTime.hour, minute: endDateTime.minute));
-
-  Future<void> pickEndDateAndTime() async {
-    DateTime? date = DateTime.now();
-    if (date == null) return;
-
-    TimeOfDay? time = await pickEndTime();
-    if (time == null) return;
-
-    var datetime =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    setState(() {
-      endDateTime = datetime;
-    });
-  }
-
-
 }

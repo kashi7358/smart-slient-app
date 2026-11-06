@@ -77,7 +77,35 @@ class _RepeatedState extends State<Repeated> {
     final provider = Provider.of<CountProvider>(context);
 
     return Scaffold(
-      backgroundColor: AppColors.kbg,
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Meeting Schedules',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF389EB4), size: 26),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => CreateDaily()),
+              );
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           Container(
@@ -96,9 +124,21 @@ class _RepeatedState extends State<Repeated> {
                   // shrinkWrap: true,
                   itemBuilder: (context, index) {
                     var data = box.values.toList().cast<RepeatedModel>();
-                    return Card(
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x0C000000),
+                            blurRadius: 8,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        padding: const EdgeInsets.all(14),
                         child: InkWell(
                           onTap: () {
                             _update(
@@ -115,17 +155,18 @@ class _RepeatedState extends State<Repeated> {
                                 context: context,
                                 builder: (BuildContext context) {
                                   return AlertDialog(
-                                    backgroundColor: AppColors.kSecondary,
-                                    title: Text("Delete"),
-                                    content: Text("Are You Sure?"),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    backgroundColor: Colors.white,
+                                    title: const Text("Delete Schedule", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                                    content: const Text("Are you sure you want to delete this meeting schedule?"),
                                     actions: [
                                       TextButton(
                                           onPressed: () {
                                             Navigator.pop(context);
                                           },
-                                          child: Text("No",
+                                          child: const Text("Cancel",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary))),
+                                                  color: Color(0xFF64748B)))),
                                       TextButton(
                                           onPressed: () {
                                             deleteTask(data[index]);
@@ -145,9 +186,9 @@ class _RepeatedState extends State<Repeated> {
                                                 AlarmId4);
                                             Navigator.pop(context);
                                           },
-                                          child: Text("Yes",
+                                          child: const Text("Delete",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary)))
+                                                  color: Colors.redAccent, fontWeight: FontWeight.bold)))
                                     ],
                                   );
                                 });
@@ -158,52 +199,58 @@ class _RepeatedState extends State<Repeated> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 30,
-                                  ),
                                   Row(
                                     children: [
-                                      Icon(Icons.repeat),
-                                      SizedBox(
-                                        width: 8,
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF389EB4).withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(Icons.business_center_rounded, color: Color(0xFF389EB4), size: 18),
                                       ),
+                                      const SizedBox(width: 10),
                                       SizedBox(
                                           width: MediaQuery.of(context)
                                                   .size
                                                   .width /
-                                              2,
+                                              2.2,
                                           child: Text(
                                             data[index].name.toString(),
                                             overflow: TextOverflow.ellipsis,
-                                            maxLines: 3,
+                                            maxLines: 1,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF1E293B),
+                                            ),
                                           )),
                                     ],
                                   ),
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 40,
-                                  ),
-                                  Text(
-                                    "Start: ${data[index].Start.hour.toString().padLeft(2, '0')}:${data[index].Start.minute.toString().padLeft(2, '0')}",
-                                    style: TextStyle(
-                                        color: AppColors.kPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
-                                  ),
-                                  SizedBox(
-                                    height: 4,
-                                  ),
-                                  Text(
-                                    "End:   ${data[index].End.hour.toString().padLeft(2, '0')}:${data[index].End.minute.toString().padLeft(2, '0')}",
-                                    style: TextStyle(
-                                        color: AppColors.kPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF389EB4)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "${data[index].Start.hour.toString().padLeft(2, '0')}:${data[index].Start.minute.toString().padLeft(2, '0')} - ${data[index].End.hour.toString().padLeft(2, '0')}:${data[index].End.minute.toString().padLeft(2, '0')}",
+                                          style: const TextStyle(
+                                              color: Color(0xFF334155),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
-                              Spacer(),
+                              const Spacer(),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisAlignment: MainAxisAlignment.end,
@@ -229,118 +276,116 @@ class _RepeatedState extends State<Repeated> {
                                       }
                                     },
                                     itemBuilder: (context) => [
-                                      PopupMenuItem(
+                                      const PopupMenuItem(
+                                        value: 2,
+                                        child: Text(
+                                          "Edit",
+                                          style: TextStyle(
+                                              color: Color(0xFF389EB4), fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
                                         value: 1,
                                         child: Text(
                                           "Delete",
                                           style: TextStyle(
-                                              color: AppColors.kPrimary),
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 2,
-                                        child: Text(
-                                          "Update",
-                                          style: TextStyle(
-                                              color: AppColors.kPrimary),
+                                              color: Colors.redAccent, fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                     ],
-                                    color: AppColors.kSecondary,
-                                    child: const Icon(Icons.more_vert),
+                                    color: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    child: const Icon(Icons.more_vert_rounded, color: Color(0xFF94A3B8)),
                                   ),
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 70,
-                                  ),
+                                  const SizedBox(height: 6),
                                   Row(
                                     children: [
                                       (data[index].dayInWeek ?? []).contains(0)
-                                          ? Text(
+                                          ? const Text(
                                               "S ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "S ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(1)
-                                          ? Text(
+                                          ? const Text(
                                               "M ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "M ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(2)
-                                          ? Text(
+                                          ? const Text(
                                               "T ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "T ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(3)
-                                          ? Text(
+                                          ? const Text(
                                               "W ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "W ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(4)
-                                          ? Text(
+                                          ? const Text(
                                               "T ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "T ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(5)
-                                          ? Text(
+                                          ? const Text(
                                               "F ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "F ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
                                                       255, 151, 149, 154)),
                                             ),
                                       (data[index].dayInWeek ?? []).contains(6)
-                                          ? Text(
+                                          ? const Text(
                                               "S ",
                                               style: TextStyle(
-                                                  color: AppColors.kPrimary,
+                                                  color: Color(0xFF389EB4),
                                                   fontWeight: FontWeight.bold),
                                             )
-                                          : Text(
+                                          : const Text(
                                               "S ",
                                               style: TextStyle(
                                                   color: Color.fromARGB(
@@ -522,12 +567,19 @@ class _RepeatedState extends State<Repeated> {
                                       print("NOW$now");
                                     },
                                     activeTrackColor:
-                                        Color.fromARGB(255, 133, 104, 173),
-                                    activeColor: AppColors.kPrimary,
+                                        const Color(0xFF389EB4).withOpacity(0.35),
+                                    activeColor: const Color(0xFF389EB4),
                                   ),
-                                  Text(data[index].isTaskActivated
-                                      ? "Activated"
-                                      : "Deactivated")
+                                  Text(
+                                    data[index].isTaskActivated ? "Active" : "Off",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: data[index].isTaskActivated
+                                          ? const Color(0xFF389EB4)
+                                          : const Color(0xFF94A3B8),
+                                    ),
+                                  )
                                 ],
                               )
                             ],
@@ -538,12 +590,74 @@ class _RepeatedState extends State<Repeated> {
                   },
                 );
               } else {
-                // isDataAvailable.value = false;
                 isDataAvailable.value = false;
-                print("::if empty ${isDataAvailable.value}");
-                return Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Center(child: Lottie.asset('assets/lottie.json')),
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF389EB4).withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.calendar_month_rounded,
+                            size: 40,
+                            color: Color(0xFF389EB4),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'No Meeting Schedules Yet',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Set up repeating silent schedules for your work meetings, university classes, or appointments.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: Color(0xFF64748B),
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const CreateDaily()),
+                            );
+                          },
+                          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+                          label: const Text(
+                            'Add Meeting Schedule',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF389EB4),
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }
               // print("if database has anything${isDataAvailable.value}");
@@ -553,24 +667,17 @@ class _RepeatedState extends State<Repeated> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.kPrimary,
+        backgroundColor: const Color(0xFF389EB4),
         onPressed: () {
-          // Navigator.push(
-          //   context,
-          //   MaterialPageRoute(
-          //       builder: (context) => CreateSchedule(
-          //             update: false,
-          //           )),
-          // );
-          showModalBottomSheet(
-              shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(25))),
-              context: context,
-              builder: (context) => BuildSheet());
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateDaily()),
+          );
         },
-        child: Icon(
+        child: const Icon(
           Icons.add,
+          color: Colors.white,
+          size: 28,
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
@@ -583,22 +690,31 @@ class _RepeatedState extends State<Repeated> {
                   MediaQuery.of(context).size.height / 8.5
               : MediaQuery.of(context).size.height / 8.5,
           padding: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.kSecondary,
+          decoration: const BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+                topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 12,
+                offset: Offset(0, -3),
+              ),
+            ],
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
             child: Column(
               children: [
                 Row(
-                  children: [
+                  children: const [
                     Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text("Quick daily silent for next :",
+                        padding: EdgeInsets.fromLTRB(10, 6, 8, 4),
+                        child: Text("Quick Daily Silent",
                             style: TextStyle(
-                              color: Colors.black,
+                              color: Color(0xFF1E293B),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             )))
                   ],
                 ),
@@ -720,13 +836,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("5 mins",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -842,13 +958,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("10 mins",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -965,13 +1081,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("30 mins",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -1091,13 +1207,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("1 hour",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -1168,13 +1284,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("2 hours",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -1245,13 +1361,13 @@ class _RepeatedState extends State<Repeated> {
                             child: Container(
                                 padding: EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
+                                  color: const Color(0xFF389EB4),
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(30),
                                   ),
                                 ),
                                 child: Text("3 hours",
-                                    style: TextStyle(color: AppColors.kbg))),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                           ),
                         ),
                       ),
@@ -1329,7 +1445,8 @@ class _RepeatedState extends State<Repeated> {
         context: context,
         builder: (context) {
           return AlertDialog(
-            backgroundColor: AppColors.kSecondary,
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             title: Text("Edit Schedule"),
             content: SingleChildScrollView(
                 child: Column(
@@ -1378,7 +1495,7 @@ class _RepeatedState extends State<Repeated> {
                     Navigator.pop(context);
                   },
                   child: Text("Cancel",
-                      style: TextStyle(color: AppColors.kPrimary))),
+                      style: const TextStyle(color: Color(0xFF389EB4), fontWeight: FontWeight.bold))),
               TextButton(
                   onPressed: () {
                     repeatedModel.name = nameController.text.toString();
@@ -1427,7 +1544,7 @@ class _RepeatedState extends State<Repeated> {
                   },
                   child: Text(
                     "Ok",
-                    style: TextStyle(color: AppColors.kPrimary),
+                    style: const TextStyle(color: Color(0xFF389EB4), fontWeight: FontWeight.bold),
                   )),
             ],
           );
@@ -1517,9 +1634,8 @@ class _RepeatedState extends State<Repeated> {
         toastLength: Toast.LENGTH_LONG,
         gravity: ToastGravity.CENTER,
         timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
+        textColor: Colors.white,
+        backgroundColor: const Color(0xFF389EB4),
       );
       await PermissionHandler.openDoNotDisturbSetting();
     }
@@ -1537,9 +1653,8 @@ class _RepeatedState extends State<Repeated> {
         toastLength: Toast.LENGTH_LONG,
         gravity: ToastGravity.CENTER,
         timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
+        textColor: Colors.white,
+        backgroundColor: const Color(0xFF389EB4),
       );
       await PermissionHandler.openDoNotDisturbSetting();
     }
@@ -1557,9 +1672,8 @@ class _RepeatedState extends State<Repeated> {
         toastLength: Toast.LENGTH_LONG,
         gravity: ToastGravity.CENTER,
         timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
+        textColor: Colors.white,
+        backgroundColor: const Color(0xFF389EB4),
       );
       await PermissionHandler.openDoNotDisturbSetting();
     }
@@ -1651,7 +1765,7 @@ class _RepeatedState extends State<Repeated> {
                                 children: [
                                   Icon(
                                     Icons.av_timer,
-                                    color: AppColors.kPrimary,
+                                    color: const Color(0xFF389EB4),
                                     size: 52,
                                   ),
                                   SizedBox(
@@ -1662,7 +1776,7 @@ class _RepeatedState extends State<Repeated> {
                                     "Set Daily",
                                     style: TextStyle(
                                         fontSize: 15,
-                                        color: AppColors.kPrimary,
+                                        color: const Color(0xFF389EB4),
                                         fontWeight: FontWeight.bold),
                                   ),
                                   SizedBox(
@@ -1673,7 +1787,7 @@ class _RepeatedState extends State<Repeated> {
                                     "Choose week days for repeated schdeules",
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: AppColors.kPrimary,
+                                      color: const Color(0xFF389EB4),
                                     ),
                                   )
                                 ],
@@ -1681,7 +1795,7 @@ class _RepeatedState extends State<Repeated> {
                             ),
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.kSecondary,
+                            color: const Color(0xFFF1F5F9),
                             // border: Border.all(color: Colors.grey)
                             borderRadius: BorderRadius.circular(29),
                           ),
@@ -1745,7 +1859,7 @@ class _RepeatedState extends State<Repeated> {
                                                 countProvider.decremenCounter(),
                                             icon: Icon(
                                               Icons.remove_circle,
-                                              color: AppColors.kPrimary,
+                                              color: const Color(0xFF389EB4),
                                               size: 52,
                                             )),
                                         Spacer(),
@@ -1754,7 +1868,7 @@ class _RepeatedState extends State<Repeated> {
                                                 .incrementCounter(),
                                             icon: Icon(
                                               Icons.add_circle,
-                                              color: AppColors.kPrimary,
+                                              color: const Color(0xFF389EB4),
                                               size: 52,
                                             )),
                                       ],
@@ -1765,7 +1879,7 @@ class _RepeatedState extends State<Repeated> {
                             ),
                           ),
                           decoration: BoxDecoration(
-                              color: AppColors.kSecondary,
+                              color: const Color(0xFFF1F5F9),
                               // border: Border.all(color: Colors.grey)
                               borderRadius: BorderRadius.circular(29),
                               border: Border.all(
@@ -1901,7 +2015,7 @@ class _RepeatedState extends State<Repeated> {
                                 children: [
                                   Icon(
                                     Icons.volume_off,
-                                    color: AppColors.kPrimary,
+                                    color: const Color(0xFF389EB4),
                                     size: 52,
                                   ),
                                   SizedBox(
@@ -1917,7 +2031,7 @@ class _RepeatedState extends State<Repeated> {
                                           "Silent for next [${countProvider.count.toString()} mins] daily",
                                           style: TextStyle(
                                               fontSize: 15,
-                                              color: AppColors.kPrimary,
+                                              color: const Color(0xFF389EB4),
                                               fontWeight: FontWeight.bold),
                                         ),
                                       );
@@ -1928,7 +2042,7 @@ class _RepeatedState extends State<Repeated> {
                             ),
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.kSecondary,
+                            color: const Color(0xFFF1F5F9),
                             // border: Border.all(color: Colors.grey)
                             borderRadius: BorderRadius.circular(29),
                           ),

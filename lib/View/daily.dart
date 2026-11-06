@@ -675,19 +675,7 @@ class _OneTimeState extends State<OneTime> {
 
   Future<void> _update(ScheduleModel scheduleModel, String name, String Start,
       String End, bool isSorV, bool isTaskActivatedd) async {
-    var startHour = startDateTime.hour.toString().padLeft(2, '0');
-    final startMinute = startDateTime.minute.toString().padLeft(2, '0');
-    final endhour = endDateTime.hour.toString().padLeft(2, '0');
-    final endminute = endDateTime.minute.toString().padLeft(2, '0');
-    var Startt =
-        "${startHour}:${startMinute}  ${startDateTime.day}/${startDateTime.month}/${startDateTime.year}";
-
-    var endd =
-        "${endhour}:${endminute}  ${startDateTime.day}/${startDateTime.month}/${startDateTime.year}";
-
     nameController.text = name;
-    Startt = Start;
-    endd = End;
     isSilentOrVibration = isSorV;
     isTaskActivated = isTaskActivatedd;
 

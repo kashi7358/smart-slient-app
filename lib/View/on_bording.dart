@@ -242,35 +242,75 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
     );
   }
 
-  // Screen 1: Welcome
+  // Screen 1: Welcome (matches uploaded mockup media_1793945689666_f0a16083.png)
   Widget _buildPageOne(Size size) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return _buildPageLayout(
-          size: size,
-          constraints: constraints,
-          imagePath: 'assets/images/onboarding 1.png',
-          title: 'Welcome',
-          subtitleWidget: Padding(
-            padding: EdgeInsets.symmetric(horizontal: size.width * 0.08),
-            child: Text(
-              'Keep Your Phone Silent when you are busy and\nstay safe from embarrasing moments',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: (size.width * 0.038).clamp(13.0, 16.0),
-                color: const Color(0xFF334155),
-                fontWeight: FontWeight.w500,
-                height: 1.4,
+        return Column(
+          children: [
+            // Hand holding phone: anchored on bottom-left so wrist seamlessly connects to edge
+            Expanded(
+              flex: 11,
+              child: Container(
+                width: double.infinity,
+                alignment: Alignment.bottomLeft,
+                child: Image.asset(
+                  'assets/images/onboarding 1.png',
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.bottomLeft,
+                ),
               ),
             ),
-          ),
-          buttonLabel: 'Get Started',
-          onButtonPressed: () {
-            _controller.nextPage(
-              duration: const Duration(milliseconds: 380),
-              curve: Curves.easeInOut,
-            );
-          },
+
+            const SizedBox(height: 16),
+
+            // Welcome Title
+            const Text(
+              'Welcome',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 27,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+                letterSpacing: -0.5,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Subtitle
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28.0),
+              child: Text(
+                'Keep Your Phone Silent when you are busy and\nstay safe from embarrasing moments',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  color: Color(0xFF334155),
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                ),
+              ),
+            ),
+
+            const Spacer(flex: 2),
+
+            // Action Button: "Get Started ->"
+            _buildActionButton(
+              label: 'Get Started',
+              size: size,
+              onTap: () {
+                _controller.nextPage(
+                  duration: const Duration(milliseconds: 380),
+                  curve: Curves.easeInOut,
+                );
+              },
+            ),
+
+            const SizedBox(height: 36),
+          ],
         );
       },
     );
@@ -280,116 +320,82 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
   Widget _buildPageTwo(Size size) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return _buildPageLayout(
-          size: size,
-          constraints: constraints,
-          imagePath: 'assets/images/onboarding 2.png',
-          title: 'Do Not Disturb Access',
-          subtitleWidget: Padding(
-            padding: EdgeInsets.symmetric(horizontal: size.width * 0.08),
-            child: Column(
-              children: [
-                Text(
-                  'We need this Permissions only for the first time.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: (size.width * 0.034).clamp(12.0, 15.0),
-                    color: const Color(0xFF475569),
+        return Column(
+          children: [
+            const SizedBox(height: 16),
+            // Illustration: Phone with DND prohibition sign centered
+            Expanded(
+              flex: 11,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Image.asset(
+                    'assets/images/onboarding 2.png',
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "Please Allow don't distrub mode. Otherwise\nApp may not work Properly.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: (size.width * 0.036).clamp(13.0, 15.5),
-                    color: const Color(0xFF334155),
-                    fontWeight: FontWeight.w500,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          buttonLabel: 'Next',
-          onButtonPressed: _handleScreenTwoNext,
-        );
-      },
-    );
-  }
-
-  // Shared responsive page layout: centers image cleanly and ensures safe area is never violated
-  Widget _buildPageLayout({
-    required Size size,
-    required BoxConstraints constraints,
-    required String imagePath,
-    required String title,
-    required Widget subtitleWidget,
-    required String buttonLabel,
-    required VoidCallback onButtonPressed,
-  }) {
-    // For normal/large screens, use Flex Column with Expanded to perfectly center the image
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 16),
-          // Hero Illustration Image - Centered horizontally and vertically
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: constraints.maxHeight * 0.45,
-                  maxWidth: constraints.maxWidth * 0.85,
-                ),
-                child: Image.asset(
-                  imagePath,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.center,
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          // Title
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: (size.width * 0.072).clamp(22.0, 28.0),
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1E293B),
-              letterSpacing: -0.5,
+
+            const SizedBox(height: 16),
+
+            // Title
+            const Text(
+              'Do Not Disturb Access',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+                letterSpacing: -0.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Subtitle
-          subtitleWidget,
-          const SizedBox(height: 28),
-          // Action Button
-          _buildActionButton(
-            label: buttonLabel,
-            size: size,
-            onTap: onButtonPressed,
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
+
+            const SizedBox(height: 12),
+
+            // Subtitles
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28.0),
+              child: Column(
+                children: const [
+                  Text(
+                    'We need this Permissions only for the first time.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    "Please Allow don't distrub mode. Otherwise\nApp may not work Properly.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Spacer(flex: 2),
+
+            // Action Button: "Next ->"
+            _buildActionButton(
+              label: 'Next',
+              size: size,
+              onTap: _handleScreenTwoNext,
+            ),
+
+            const SizedBox(height: 36),
+          ],
+        );
+      },
     );
-
-    // If device height is exceptionally small (e.g. landscape or small phone), wrap in scroll view
-    if (constraints.maxHeight < 520) {
-      return SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(child: content),
-        ),
-      );
-    }
-
-    return content;
   }
 
   // Reusable custom rounded action button with arrow icon

@@ -98,7 +98,35 @@ class _NemazState extends State<Nemaz> {
     final provider = Provider.of<CountProvider>(context);
 
     return Scaffold(
-      backgroundColor: AppColors.kbg,
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Prayer Schedules',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF389EB4), size: 26),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CreateNemaz()),
+              );
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           Container(
