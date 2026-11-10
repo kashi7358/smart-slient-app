@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:smart_silent/models/repeated_model.dart';
+import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
 
 import '../Boxes/boxes.dart';
 
@@ -121,6 +122,7 @@ class _CreateDailyState extends State<CreateDaily> {
 
     final box = Boxes.getDataforDaily();
     await box.add(data);
+    await MeetingAlarmHelper.syncAllMeetings();
 
     if (mounted) {
       Fluttertoast.showToast(

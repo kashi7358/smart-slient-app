@@ -40,7 +40,7 @@
             android:exported="false"/>
         <receiver
             android:name="dev.fluttercommunity.plus.androidalarmmanager.RebootBroadcastReceiver"
-            android:enabled="false"
+            android:enabled="true"
             android:exported="false">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -61,13 +61,28 @@
     <!-- Alarm Manager -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <!-- For apps with targetSDK=31 (Android 12) -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- For apps with targetSDK=31-35 (Android 12 to 15) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- battery -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Package Visibility Queries for Maps & Navigation -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <package android:name="com.google.android.apps.maps" />
+    </queries>
 
 
    

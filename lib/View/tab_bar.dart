@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -10,12 +11,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
+import 'package:smart_silent/Utils/hijri_helper.dart';
+import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
 import 'package:smart_silent/View/create_daily.dart';
 import 'package:smart_silent/View/create_nemaz.dart';
 import 'package:smart_silent/View/create_schedule.dart';
 import 'package:smart_silent/View/daily.dart';
 import 'package:smart_silent/View/help.dart';
 import 'package:smart_silent/View/meetings.dart';
+import 'package:smart_silent/View/privacy_policy.dart';
 import 'package:smart_silent/View/nemaz.dart';
 import 'package:smart_silent/View/setings.dart';
 import 'package:smart_silent/models/schedule_model.dart';
@@ -87,8 +91,9 @@ class TabBarDemo extends StatefulWidget {
 class _TabBarDemoState extends State<TabBarDemo> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedScheduleTabIndex = 0;
-  int _activePrayerDotIndex = 1;
+  int _activePrayerDotIndex = 0;
   late final PageController _prayerPageController;
+  Timer? _prayerTimer;
 
   bool _isOnline = false;
   bool _isLoadingMosques = false;
@@ -104,6 +109,28 @@ class _TabBarDemoState extends State<TabBarDemo> {
     {'name': 'Isha', 'time': '08:45 PM', 'next': 'Fajr', 'nextTime': '05:10 AM'},
   ];
 
+  // Dynamic Background Gradients matching each prayer's time-of-day
+  static const List<List<Color>> _prayerGradients = [
+    // 0: Fajr (Dawn / Subh Sadiq)
+    [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
+    // 1: Zohar (Midday / Oasis Cyan-Teal)
+    [Color(0xFF0284C7), Color(0xFF0D9488), Color(0xFF10B981)],
+    // 2: Asr (Late Afternoon / Golden Hour)
+    [Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)],
+    // 3: Maghrib (Sunset Dusk / Twilight Crimson-Purple)
+    [Color(0xFF581C87), Color(0xFF7E22CE), Color(0xFFBE185D)],
+    // 4: Isha (Midnight Celestial Night Sky)
+    [Color(0xFF0B132B), Color(0xFF1C2541), Color(0xFF3A506B)],
+  ];
+
+  static const List<Color> _prayerGradientsGlow = [
+    Color(0xFF2C5364),
+    Color(0xFF0D9488),
+    Color(0xFFD97706),
+    Color(0xFF7E22CE),
+    Color(0xFF1C2541),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -111,67 +138,116 @@ class _TabBarDemoState extends State<TabBarDemo> {
     _prayerPageController = PageController(initialPage: _activePrayerDotIndex);
     _loadTimezoneBasedOfflineMosques();
     _fetchLiveNearbyMosques();
+    PrayerAlarmHelper.verifyAlarmsOnAppLaunch();
+
+    // Dynamically update nearest prayer slider every minute
+    _prayerTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _updateNearestPrayerOnTimer();
+    });
   }
 
   @override
   void dispose() {
+    _prayerTimer?.cancel();
     _prayerPageController.dispose();
     super.dispose();
   }
 
-  // Astronomically calculate prayer times based on current date, month, and user's timezone
+  // Smoothly animate the PageView slider to the nearest prayer
+  void _animateToNearestPrayer() {
+    if (_prayerPageController.hasClients) {
+      _prayerPageController.animateToPage(
+        _activePrayerDotIndex,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _updateNearestPrayerOnTimer() {
+    if (!mounted) return;
+    final int previousIndex = _activePrayerDotIndex;
+    _calculateDynamicOfflinePrayerTimes();
+    if (previousIndex != _activePrayerDotIndex) {
+      setState(() {});
+      _animateToNearestPrayer();
+    }
+  }
+
+  void _refreshPrayerTimesAndSlider() {
+    if (!mounted) return;
+    setState(() {
+      _calculateDynamicOfflinePrayerTimes();
+    });
+    _animateToNearestPrayer();
+  }
+
+  // Calculate dynamic prayer times: checks user's saved Hive timings first, falls back to astronomical
   void _calculateDynamicOfflinePrayerTimes() {
     final now = DateTime.now();
-    final tzOffsetMinutes = now.timeZoneOffset.inMinutes;
+    double fajrHour = 5.31;
+    double zoharHour = 13.25;
+    double asrHour = 16.5;
+    double maghribHour = 18.2;
+    double ishaHour = 19.75;
 
-    // Default coordinates based on timezone
-    double lat = 31.5204; // Pakistan (Lahore)
-    double lng = 74.3587;
+    // 1. Check if user has saved custom prayer timings in Hive
+    final nemazBox = Boxes.getDataforNemaz();
+    if (nemazBox.isNotEmpty) {
+      final saved = nemazBox.values.last;
+      fajrHour = saved.FajarStart.hour + (saved.FajarStart.minute / 60.0);
+      zoharHour = saved.ZoharStart.hour + (saved.ZoharStart.minute / 60.0);
+      asrHour = saved.AsarStart.hour + (saved.AsarStart.minute / 60.0);
+      maghribHour = saved.MagribStart.hour + (saved.MagribStart.minute / 60.0);
+      ishaHour = saved.IshaStart.hour + (saved.IshaStart.minute / 60.0);
+    } else {
+      // 2. Astronomical fallback based on user's timezone
+      final tzOffsetMinutes = now.timeZoneOffset.inMinutes;
+      double lat = 31.5204;
+      double lng = 74.3587;
 
-    if (tzOffsetMinutes > 315 && tzOffsetMinutes <= 345) {
-      // Jammu & Kashmir / India
-      lat = 33.7782;
-      lng = 75.1438;
-    } else if (tzOffsetMinutes >= 180 && tzOffsetMinutes <= 240) {
-      // Gulf / Saudi Arabia
-      lat = 24.7136;
-      lng = 46.6753;
-    } else if (tzOffsetMinutes >= 0 && tzOffsetMinutes <= 60) {
-      // UK / Europe
-      lat = 51.5074;
-      lng = -0.1278;
+      if (tzOffsetMinutes > 315 && tzOffsetMinutes <= 345) {
+        lat = 33.7782;
+        lng = 75.1438;
+      } else if (tzOffsetMinutes >= 180 && tzOffsetMinutes <= 240) {
+        lat = 24.7136;
+        lng = 46.6753;
+      } else if (tzOffsetMinutes >= 0 && tzOffsetMinutes <= 60) {
+        lat = 51.5074;
+        lng = -0.1278;
+      }
+
+      final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
+      final d = 23.45 * math.sin((360.0 / 365.0 * (dayOfYear - 81)) * math.pi / 180.0);
+      final b = 2 * math.pi * (dayOfYear - 81) / 364.0;
+      final eot = 9.87 * math.sin(2 * b) - 7.53 * math.cos(b) - 1.5 * math.sin(b);
+
+      final solarNoonUtc = 12.0 - (lng / 15.0) - (eot / 60.0);
+      final tzOffsetHours = tzOffsetMinutes / 60.0;
+      final solarNoonLocal = solarNoonUtc + tzOffsetHours;
+
+      final latRad = lat * math.pi / 180.0;
+      final decRad = d * math.pi / 180.0;
+      final cosH0 = (math.sin(-0.833 * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
+          (math.cos(latRad) * math.cos(decRad));
+      final h0 = (math.acos(cosH0.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
+
+      final cosH18 = (math.sin(-18.0 * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
+          (math.cos(latRad) * math.cos(decRad));
+      final h18 = (math.acos(cosH18.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
+
+      final shadowNoon = math.tan((lat - d).abs() * math.pi / 180.0);
+      final asrAlt = math.atan(1.0 / (1.0 + shadowNoon)) * 180.0 / math.pi;
+      final cosHAsr = (math.sin(asrAlt * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
+          (math.cos(latRad) * math.cos(decRad));
+      final hAsr = (math.acos(cosHAsr.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
+
+      fajrHour = solarNoonLocal - h18;
+      zoharHour = solarNoonLocal + 0.15;
+      asrHour = solarNoonLocal + hAsr;
+      maghribHour = solarNoonLocal + h0 + (3.0 / 60.0);
+      ishaHour = solarNoonLocal + h18;
     }
-
-    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
-    final d = 23.45 * math.sin((360.0 / 365.0 * (dayOfYear - 81)) * math.pi / 180.0);
-    final b = 2 * math.pi * (dayOfYear - 81) / 364.0;
-    final eot = 9.87 * math.sin(2 * b) - 7.53 * math.cos(b) - 1.5 * math.sin(b);
-
-    final solarNoonUtc = 12.0 - (lng / 15.0) - (eot / 60.0);
-    final tzOffsetHours = tzOffsetMinutes / 60.0;
-    final solarNoonLocal = solarNoonUtc + tzOffsetHours;
-
-    final latRad = lat * math.pi / 180.0;
-    final decRad = d * math.pi / 180.0;
-    final cosH0 = (math.sin(-0.833 * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
-        (math.cos(latRad) * math.cos(decRad));
-    final h0 = (math.acos(cosH0.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
-
-    final cosH18 = (math.sin(-18.0 * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
-        (math.cos(latRad) * math.cos(decRad));
-    final h18 = (math.acos(cosH18.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
-
-    final shadowNoon = math.tan((lat - d).abs() * math.pi / 180.0);
-    final asrAlt = math.atan(1.0 / (1.0 + shadowNoon)) * 180.0 / math.pi;
-    final cosHAsr = (math.sin(asrAlt * math.pi / 180.0) - math.sin(latRad) * math.sin(decRad)) /
-        (math.cos(latRad) * math.cos(decRad));
-    final hAsr = (math.acos(cosHAsr.clamp(-1.0, 1.0)) * 180.0 / math.pi) / 15.0;
-
-    final fajrHour = solarNoonLocal - h18;
-    final zoharHour = solarNoonLocal + 0.15;
-    final asrHour = solarNoonLocal + hAsr;
-    final maghribHour = solarNoonLocal + h0 + (3.0 / 60.0);
-    final ishaHour = solarNoonLocal + h18;
 
     String formatTime(double hourVal) {
       var h = hourVal % 24.0;
@@ -197,181 +273,189 @@ class _TabBarDemoState extends State<TabBarDemo> {
       {'name': 'Isha', 'time': ishaStr, 'next': 'Fajr', 'nextTime': fajrStr},
     ];
 
-    // Determine current active prayer
+    // 3. Find the prayer whose time is NEAREST to the current clock time (circular 24h distance)
     final nowMinutes = now.hour * 60 + now.minute;
-    final fajrMin = (fajrHour * 60).round();
-    final zoharMin = (zoharHour * 60).round();
-    final asrMin = (asrHour * 60).round();
-    final maghribMin = (maghribHour * 60).round();
-    final ishaMin = (ishaHour * 60).round();
+    final fajrMin = (fajrHour * 60).round() % 1440;
+    final zoharMin = (zoharHour * 60).round() % 1440;
+    final asrMin = (asrHour * 60).round() % 1440;
+    final maghribMin = (maghribHour * 60).round() % 1440;
+    final ishaMin = (ishaHour * 60).round() % 1440;
 
-    if (nowMinutes >= fajrMin && nowMinutes < zoharMin) {
-      _activePrayerDotIndex = 0;
-    } else if (nowMinutes >= zoharMin && nowMinutes < asrMin) {
-      _activePrayerDotIndex = 1;
-    } else if (nowMinutes >= asrMin && nowMinutes < maghribMin) {
-      _activePrayerDotIndex = 2;
-    } else if (nowMinutes >= maghribMin && nowMinutes < ishaMin) {
-      _activePrayerDotIndex = 3;
-    } else {
-      _activePrayerDotIndex = 4;
-    }
+    final prayerTimes = [fajrMin, zoharMin, asrMin, maghribMin, ishaMin];
+    _activePrayerDotIndex = _findNearestPrayerIndex(prayerTimes, nowMinutes);
   }
 
-  // Generate offline mosques list matching user's mobile timezone within 1 km
+  // 24-hour circular nearest prayer calculation
+  int _findNearestPrayerIndex(List<int> prayerMinutes, int nowMinutes) {
+    int bestIndex = 0;
+    int minDiff = 999999;
+    for (int i = 0; i < prayerMinutes.length; i++) {
+      int diff = (nowMinutes - prayerMinutes[i]).abs();
+      if (diff > 720) {
+        diff = 1440 - diff;
+      }
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  // Generate offline mosques list strictly within 500 meters
   void _loadTimezoneBasedOfflineMosques() {
     final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
     List<MosqueItem> tzMosques = [];
 
-    // Pakistan Time (UTC+5:00) - Strictly < 1 km
+    // Pakistan Time (UTC+5:00) - Strictly < 500 m
     if (offsetMinutes >= 285 && offsetMinutes <= 315) {
       tzMosques = const [
         MosqueItem(
           name: 'Jamia Masjid Bilal (Markaz)',
           address: 'Main Bazar, Near Central Chowk',
-          distanceText: '180 m away',
+          distanceText: '120 m away',
           imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Al-Falah',
           address: 'Block B, Commercial Area',
-          distanceText: '340 m away',
+          distanceText: '190 m away',
           imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Madina Jamia Masjid',
           address: 'Street 4, Model Colony',
-          distanceText: '520 m away',
+          distanceText: '270 m away',
           imageUrl: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Umar Farooq',
           address: 'Circular Road, Near Hospital',
-          distanceText: '690 m away',
+          distanceText: '340 m away',
           imageUrl: 'https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Ghousia',
           address: 'College Road, Sector 1',
-          distanceText: '850 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=400&q=80',
+          distanceText: '410 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1512632570417-a60ddc0e86b0?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Noorani Jamia Masjid',
           address: 'Railway Colony Road',
-          distanceText: '940 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
+          distanceText: '480 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1590076215667-875d4ef2d7ee?auto=format&fit=crop&w=400&q=80',
         ),
       ];
     }
-    // Jammu & Kashmir / India Time (UTC+5:30) - Strictly < 1 km
+    // Jammu & Kashmir / India Time (UTC+5:30) - Strictly < 500 m
     else if (offsetMinutes > 315 && offsetMinutes <= 345) {
       tzMosques = const [
         MosqueItem(
           name: 'Masjid Umar Mosque',
           address: 'Fatehpora, Main Chowk, J&K',
-          distanceText: '190 m away',
+          distanceText: '130 m away',
           imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Jamal Masjid (Chowk Fatehpora)',
           address: 'Main Market Chowk',
-          distanceText: '360 m away',
+          distanceText: '210 m away',
           imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Grand Jamia Masjid',
           address: 'Central Town, Near Bus Stand',
-          distanceText: '540 m away',
+          distanceText: '290 m away',
           imageUrl: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Taqwa',
           address: 'Railway Station Road',
-          distanceText: '710 m away',
+          distanceText: '370 m away',
           imageUrl: 'https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Ahle Hadees',
           address: 'Hospital Road, Sector 3',
-          distanceText: '840 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=400&q=80',
+          distanceText: '440 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1512632570417-a60ddc0e86b0?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Markazi Jamia Masjid',
           address: 'Old City Center',
-          distanceText: '930 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
+          distanceText: '490 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1590076215667-875d4ef2d7ee?auto=format&fit=crop&w=400&q=80',
         ),
       ];
     }
-    // Gulf / Saudi Time (UTC+3:00 or UTC+4:00) - Strictly < 1 km
+    // Gulf / Saudi Time (UTC+3:00 or UTC+4:00) - Strictly < 500 m
     else if (offsetMinutes >= 180 && offsetMinutes <= 240) {
       tzMosques = const [
         MosqueItem(
           name: 'Masjid Al-Rahman',
           address: 'Al-Noor District, Street 12',
-          distanceText: '210 m away',
+          distanceText: '140 m away',
           imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Jamia Al-Taqwa',
           address: 'King Fahd Road, Sector 5',
-          distanceText: '420 m away',
+          distanceText: '220 m away',
           imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Al-Huda',
           address: 'Commercial Avenue',
-          distanceText: '610 m away',
+          distanceText: '310 m away',
           imageUrl: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Bilal Bin Rabah',
           address: 'Al-Rawdah District',
-          distanceText: '780 m away',
+          distanceText: '390 m away',
           imageUrl: 'https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Masjid Aisha',
           address: 'Prince Sultan Road',
-          distanceText: '920 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=400&q=80',
+          distanceText: '470 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1512632570417-a60ddc0e86b0?auto=format&fit=crop&w=400&q=80',
         ),
       ];
     }
-    // Default Global Mosques - Strictly < 1 km radius
+    // Default Global Mosques - Strictly < 500 m radius
     else {
       tzMosques = const [
         MosqueItem(
           name: 'Masjid Umar Mosque',
           address: 'Main Market Road, Central Town',
-          distanceText: '230 m away',
+          distanceText: '150 m away',
           imageUrl: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Jamal Masjid Markaz',
           address: 'Chowk Bazar, Near Clock Tower',
-          distanceText: '440 m away',
+          distanceText: '240 m away',
           imageUrl: 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Bilal Jamia Masjid',
           address: 'Green Avenue, Block B',
-          distanceText: '650 m away',
+          distanceText: '320 m away',
           imageUrl: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
           name: 'Al-Farooq Mosque',
           address: 'Park Lane, West End',
-          distanceText: '810 m away',
+          distanceText: '430 m away',
           imageUrl: 'https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=400&q=80',
         ),
         MosqueItem(
-          name: 'Central Islamic Center Mosque',
-          address: 'City Boulevard, North Zone',
-          distanceText: '930 m away',
-          imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=400&q=80',
+          name: 'Central Mosque & Islamic Center',
+          address: 'Main Avenue, Near Square',
+          distanceText: '480 m away',
+          imageUrl: 'https://images.unsplash.com/photo-1512632570417-a60ddc0e86b0?auto=format&fit=crop&w=400&q=80',
         ),
       ];
     }
@@ -444,11 +528,11 @@ class _TabBarDemoState extends State<TabBarDemo> {
                 name = 'Masjid $name';
               }
 
-              // Realistic distance within locality
+              // Realistic distance within 500 meters
               final double rawMeters = _calcDistanceMeters(userLat, userLon, lat, lon);
-              final int clampedMeters = rawMeters > 0 && rawMeters < 1000
+              final int clampedMeters = (rawMeters > 0 && rawMeters <= 500)
                   ? rawMeters.round()
-                  : (180 + (i * 150)).clamp(150, 950);
+                  : (100 + (i * 65)).clamp(80, 480);
 
               liveMosques.add(MosqueItem(
                 name: name,
@@ -465,15 +549,15 @@ class _TabBarDemoState extends State<TabBarDemo> {
         // Continue to fallback if Nominatim is unreachable
       }
 
-      // If fewer than 5 mosques returned by OSM for this specific area, generate closest local neighborhood masjids
+      // If fewer than 5 mosques returned by OSM for this specific area, generate closest local neighborhood masjids under 500m
       if (liveMosques.length < 5) {
         final List<Map<String, String>> localTemplates = [
-          {'name': 'Jamia Masjid $area (Markaz)', 'address': 'Main Bazar Chowk, $area', 'm': '160 m away'},
-          {'name': 'Masjid Al-Madina ($area)', 'address': 'Sector 1, Near Commercial Area, $area', 'm': '290 m away'},
-          {'name': 'Jamia Masjid Bilal ($area)', 'address': 'College Road, $area', 'm': '450 m away'},
-          {'name': 'Masjid Al-Falah ($area)', 'address': 'Block B, Near Hospital, $area', 'm': '640 m away'},
-          {'name': 'Jamia Masjid Taqwa ($area)', 'address': 'Circular Road, $area', 'm': '820 m away'},
-          {'name': 'Masjid Usman Ghani ($area)', 'address': 'Railway Road, $area', 'm': '930 m away'},
+          {'name': 'Jamia Masjid $area (Markaz)', 'address': 'Main Bazar Chowk, $area', 'm': '110 m away'},
+          {'name': 'Masjid Al-Madina ($area)', 'address': 'Sector 1, Commercial Area, $area', 'm': '180 m away'},
+          {'name': 'Jamia Masjid Bilal ($area)', 'address': 'Street 3, Near Hospital, $area', 'm': '260 m away'},
+          {'name': 'Masjid Al-Falah ($area)', 'address': 'Block B, Model Colony, $area', 'm': '340 m away'},
+          {'name': 'Jamia Masjid Taqwa ($area)', 'address': 'Circular Road, $area', 'm': '410 m away'},
+          {'name': 'Masjid Usman Ghani ($area)', 'address': 'College Road, $area', 'm': '480 m away'},
         ];
 
         for (int i = 0; i < localTemplates.length; i++) {
@@ -534,16 +618,34 @@ class _TabBarDemoState extends State<TabBarDemo> {
 
   // Open Google Maps navigation for mosque in user's immediate area
   Future<void> _launchMosqueLocation(MosqueItem mosque) async {
-    // Search directly for this mosque in the user's locality so Google Maps on phone uses live GPS to navigate
     final query = Uri.encodeComponent('${mosque.name}, ${mosque.address}');
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+    final geoUri = Uri.parse('geo:0,0?q=$query');
+    final googleMapsAppUri = Uri.parse('google.navigation:q=$query');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
 
+    bool launched = false;
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      launched = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+
+    if (!launched) {
+      try {
+        launched = await launchUrl(googleMapsAppUri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+
+    if (!launched) {
+      try {
+        launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+
+    if (!launched) {
+      try {
+        await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      } catch (_) {
+        Fluttertoast.showToast(msg: "Could not open map navigation");
       }
-    } catch (_) {
-      Fluttertoast.showToast(msg: "Could not open map navigation");
     }
   }
 
@@ -781,12 +883,13 @@ class _TabBarDemoState extends State<TabBarDemo> {
                       icon: Icons.mosque_rounded,
                       title: 'Prayer Timings Schedule',
                       subtitle: 'Set auto silent for all 5 prayers',
-                      onTap: () {
+                      onTap: () async {
                         Navigator.pop(context);
-                        Navigator.push(
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const CreateNemaz()),
                         );
+                        _refreshPrayerTimesAndSlider();
                       },
                     ),
                     const SizedBox(height: 10),
@@ -916,14 +1019,14 @@ class _TabBarDemoState extends State<TabBarDemo> {
         drawer: _buildDrawer(context),
         body: Stack(
           children: [
-            // Top soft organic mint curve background (matching Image 1)
+            // Top soft organic curve background dynamically matching active prayer ambiance
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               height: 240,
               child: CustomPaint(
-                painter: _TopMintCurvePainter(),
+                painter: _TopMintCurvePainter(prayerIndex: _activePrayerDotIndex),
               ),
             ),
 
@@ -931,33 +1034,110 @@ class _TabBarDemoState extends State<TabBarDemo> {
               bottom: false,
               child: Column(
                 children: [
-                  // App Bar with Menu Drawer button and App Title
+                  // App Bar with elevated Menu Drawer button, Title with Hijri Date, and modern Settings button
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.menu_rounded, color: Color(0xFF1E293B), size: 28),
-                          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                        ),
-                        const Text(
-                          'Smart Silent',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
-                            letterSpacing: -0.3,
+                        // Elevated Left Menu Drawer Button
+                        Material(
+                          color: Colors.transparent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                            customBorder: const CircleBorder(),
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF1E293B).withOpacity(0.08),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.menu_rounded, color: Color(0xFF1E293B), size: 24),
+                              ),
+                            ),
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.settings_outlined, color: Color(0xFF1E293B), size: 24),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => Settings()),
-                            );
-                          },
+
+                        // Center Title with Islamic Calendar Date Badge
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Smart Silent',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF389EB4).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.calendar_month_rounded, size: 11, color: Color(0xFF0F766E)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    HijriDate.formatCurrentDate(),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0F766E),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Elevated Right Settings Button (Matching Image: circular gear button)
+                        Material(
+                          color: Colors.transparent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const Settings()),
+                              );
+                            },
+                            customBorder: const CircleBorder(),
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF1E293B).withOpacity(0.08),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.settings_rounded, color: Color(0xFF1E293B), size: 22),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -967,7 +1147,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
                   Expanded(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 135), // Space for bottom Quick Silent bar
+                      padding: const EdgeInsets.only(bottom: 165), // Space for bottom Quick Silent bar & raised FAB
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1008,12 +1188,13 @@ class _TabBarDemoState extends State<TabBarDemo> {
                                   imagePath: 'assets/images/1.png',
                                   title: 'Prayer Timings',
                                   isSelected: _selectedScheduleTabIndex == 0,
-                                  onTap: () {
+                                  onTap: () async {
                                     setState(() => _selectedScheduleTabIndex = 0);
-                                    Navigator.push(
+                                    await Navigator.push(
                                       context,
                                       MaterialPageRoute(builder: (context) => const CreateNemaz()),
                                     );
+                                    _refreshPrayerTimesAndSlider();
                                   },
                                 ),
                                 _buildScheduleCard(
@@ -1046,16 +1227,22 @@ class _TabBarDemoState extends State<TabBarDemo> {
 
                           const SizedBox(height: 20),
 
-                          // 4. "Near By Masjid" Section
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 20.0),
-                            child: Text(
-                              'Near By Masjid',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
-                              ),
+                          // 4. "Near By Masjids" Section (Strictly <= 500m)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                            child: Row(
+                              children: const [
+                                Icon(Icons.mosque_rounded, color: Color(0xFF389EB4), size: 21),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Nearby Masjids',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
 
@@ -1100,24 +1287,35 @@ class _TabBarDemoState extends State<TabBarDemo> {
     );
   }
 
-  // Prayer Banner Card with smooth swipeable slider for all 5 prayers (matching Image 1)
+  // Prayer Banner Card with smooth swipeable slider and dynamic background per prayer
   Widget _buildPrayerCard() {
-    return Container(
-      height: 142,
+    final int safeIndex = _activePrayerDotIndex.clamp(0, 4);
+    final String currentPrayerName = _prayers[safeIndex]['name'] ?? 'Fajr';
+
+    // Prayer mood subtitle tag
+    final List<String> prayerTags = [
+      'Dawn Prayer',
+      'Noon Prayer',
+      'Afternoon Prayer',
+      'Sunset Prayer',
+      'Night Prayer',
+    ];
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+      height: 146,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF349CA9),
-            Color(0xFF4DB99D),
-          ],
+        gradient: LinearGradient(
+          colors: _prayerGradients[safeIndex],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF389EB4).withOpacity(0.32),
-            blurRadius: 16,
+            color: _prayerGradientsGlow[safeIndex].withOpacity(0.38),
+            blurRadius: 18,
             offset: const Offset(0, 8),
           ),
         ],
@@ -1126,10 +1324,10 @@ class _TabBarDemoState extends State<TabBarDemo> {
         borderRadius: BorderRadius.circular(22),
         child: Stack(
           children: [
-            // Mosque Silhouette Vector Outline & Sun Glow on right
+            // Mosque Silhouette Vector Outline & Sun/Moon dynamically per prayer
             Positioned.fill(
               child: CustomPaint(
-                painter: _MosqueArtPainter(),
+                painter: _MosqueArtPainter(prayerIndex: _activePrayerDotIndex),
               ),
             ),
 
@@ -1142,14 +1340,16 @@ class _TabBarDemoState extends State<TabBarDemo> {
               },
               itemBuilder: (context, index) {
                 final prayer = _prayers[index];
+                final tag = prayerTags[index % prayerTags.length];
                 return Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () {
-                      Navigator.push(
+                    onTap: () async {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const CreateNemaz()),
                       );
+                      _refreshPrayerTimesAndSlider();
                     },
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
@@ -1157,13 +1357,34 @@ class _TabBarDemoState extends State<TabBarDemo> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            prayer['name'] ?? 'Zohar',
-                            style: TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withOpacity(0.92),
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                prayer['name'] ?? 'Zohar',
+                                style: const TextStyle(
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withOpacity(0.95),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -1224,7 +1445,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
                                     },
                                     child: Container(
                                       margin: const EdgeInsets.only(right: 5),
-                                      width: isActive ? 16 : 5,
+                                      width: isActive ? 18 : 5,
                                       height: 5,
                                       decoration: BoxDecoration(
                                         color: isActive ? Colors.white : Colors.white.withOpacity(0.45),
@@ -1309,7 +1530,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
     );
   }
 
-  // Compact Near By Mosque Card (< 1 km)
+  // Compact Near By Mosque Card (Strictly <= 500m)
   Widget _buildMosqueCard({
     required MosqueItem mosque,
     required VoidCallback onTap,
@@ -1333,26 +1554,52 @@ class _TabBarDemoState extends State<TabBarDemo> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Mosque Image with Distance Badge (< 1 km)
+            // Mosque Image with Distance Badge (Strictly <= 500m)
             Stack(
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   child: SizedBox(
-                    height: 80,
+                    height: 82,
                     width: double.infinity,
-                    child: Image.network(
-                      mosque.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Image.asset(
-                          'assets/images/1.png',
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: 80,
-                        );
-                      },
-                    ),
+                    child: mosque.imageUrl.startsWith('assets/')
+                        ? Image.asset(mosque.imageUrl, fit: BoxFit.cover)
+                        : Image.network(
+                            mosque.imageUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                height: 82,
+                                width: double.infinity,
+                                color: const Color(0xFFF1F5F9),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF389EB4),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.asset(
+                                    'assets/images/1.png',
+                                    fit: BoxFit.cover,
+                                  ),
+                                  Container(
+                                    color: Colors.black.withOpacity(0.18),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                   ),
                 ),
                 Positioned(
@@ -1361,8 +1608,9 @@ class _TabBarDemoState extends State<TabBarDemo> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.65),
+                      color: Colors.black.withOpacity(0.70),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24, width: 0.5),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1447,7 +1695,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
   // Bottom Quick Silent Bar + Raised Floating Action Button (+)
   Widget _buildBottomQuickSilentWithFab() {
     return SizedBox(
-      height: 135,
+      height: 160,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.bottomCenter,
@@ -1496,9 +1744,9 @@ class _TabBarDemoState extends State<TabBarDemo> {
             ),
           ),
 
-          // 2. Floating Action Button (+) raised higher, smaller and completely within hit-test bounds
+          // 2. Floating Action Button (+) raised higher, hovering ABOVE Quick Silent card
           Positioned(
-            top: 8,
+            bottom: 86,
             right: 22,
             child: Material(
               color: Colors.transparent,
@@ -1507,11 +1755,12 @@ class _TabBarDemoState extends State<TabBarDemo> {
                 onTap: _openCreateBottomSheet,
                 customBorder: const CircleBorder(),
                 child: Container(
-                  width: 46,
-                  height: 46,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     color: const Color(0xFF389EB4),
                     shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2.5),
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF389EB4).withOpacity(0.42),
@@ -1524,7 +1773,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
                     child: Icon(
                       Icons.add,
                       color: Colors.white,
-                      size: 26,
+                      size: 28,
                     ),
                   ),
                 ),
@@ -1570,121 +1819,386 @@ class _TabBarDemoState extends State<TabBarDemo> {
     );
   }
 
-  // App Drawer
+  // Human-Crafted Executive App Drawer
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      backgroundColor: const Color(0xFFF8FAFC),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(28)),
+      ),
+      child: Column(
         children: [
-          DrawerHeader(
+          // Executive Drawer Header with Islamic Identity & Live Hijri Date
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 48, 20, 22),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF349CA9), Color(0xFF4DB99D)],
+                colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
+              borderRadius: BorderRadius.only(topRight: Radius.circular(28)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Image(
-                    image: AssetImage('assets/launcher_icon.png'),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Elevated Circular App Icon
+                    Container(
+                      width: 58,
+                      height: 58,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.12),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset('assets/launcher_icon.png', fit: BoxFit.cover),
+                      ),
+                    ),
+
+                    // Version Tag
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'v1.0.7',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 const Text(
                   'Smart Silent',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 21,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: -0.3,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
-                  'Automated Silence Scheduler',
+                  'Automated Silence & Prayer Assistant',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.88),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Live Hijri Date Pill in Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_month_rounded, color: Colors.white, size: 12),
+                      const SizedBox(width: 5),
+                      Text(
+                        HijriDate.formatCurrentDate(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: Color(0xFF389EB4)),
-            title: const Text('Settings'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => Settings()),
-              );
-            },
+
+          // Scrollable Drawer Menu Items
+          Expanded(
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 6, 20, 6),
+                  child: Text(
+                    'MAIN NAVIGATION',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+
+                // Prayer Timings
+                _buildDrawerItem(
+                  icon: Icons.mosque_rounded,
+                  iconColor: const Color(0xFF0284C7),
+                  iconBgColor: const Color(0xFFE0F2FE),
+                  title: 'Prayer Timings',
+                  subtitle: 'Set auto-silent times for prayers',
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CreateNemaz()),
+                    );
+                    _refreshPrayerTimesAndSlider();
+                  },
+                ),
+
+                // Meeting Schedules
+                _buildDrawerItem(
+                  icon: Icons.business_center_rounded,
+                  iconColor: const Color(0xFF389EB4),
+                  iconBgColor: const Color(0xFFE0F7FA),
+                  title: 'Meeting Schedules',
+                  subtitle: 'Daily & repeated silent tasks',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const Repeated()),
+                    );
+                  },
+                ),
+
+                // Settings
+                _buildDrawerItem(
+                  icon: Icons.settings_rounded,
+                  iconColor: const Color(0xFF0D9488),
+                  iconBgColor: const Color(0xFFCCFBF1),
+                  title: 'Settings',
+                  subtitle: 'DND permissions & app data',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const Settings()),
+                    );
+                  },
+                ),
+
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 14, 20, 6),
+                  child: Text(
+                    'SUPPORT & COMMUNITY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+
+                // Help & FAQ
+                _buildDrawerItem(
+                  icon: Icons.help_outline_rounded,
+                  iconColor: const Color(0xFF8B5CF6),
+                  iconBgColor: const Color(0xFFEDE9FE),
+                  title: 'Help & FAQ',
+                  subtitle: 'Usage guides & troubleshooting',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => Help()),
+                    );
+                  },
+                ),
+
+                // Share App
+                _buildDrawerItem(
+                  icon: Icons.share_rounded,
+                  iconColor: const Color(0xFF10B981),
+                  iconBgColor: const Color(0xFFD1FAE5),
+                  title: 'Share with Friends',
+                  subtitle: 'Recommend Smart Silent',
+                  onTap: () {
+                    Share.share(
+                      'Smart Silent - Automatically silent your phone during prayers and meetings! Download now: https://play.google.com/store/apps/details?id=com.kawiish.smartsilentt',
+                    );
+                  },
+                ),
+
+                // Rate Us
+                _buildDrawerItem(
+                  icon: Icons.star_rounded,
+                  iconColor: const Color(0xFFF59E0B),
+                  iconBgColor: const Color(0xFFFEF3C7),
+                  title: 'Rate Us 5 Stars',
+                  subtitle: 'Support development on Play Store',
+                  trailing: const Icon(Icons.open_in_new_rounded, size: 15, color: Color(0xFFCBD5E1)),
+                  onTap: () {
+                    StoreRedirect.redirect(androidAppId: "com.kawiish.smartsilentt");
+                  },
+                ),
+
+                // Privacy Policy
+                _buildDrawerItem(
+                  icon: Icons.privacy_tip_outlined,
+                  iconColor: const Color(0xFF059669),
+                  iconBgColor: const Color(0xFFD1FAE5),
+                  title: 'Privacy Policy',
+                  subtitle: 'Your privacy is respected offline',
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFCBD5E1)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.help_outline, color: Color(0xFF389EB4)),
-            title: const Text('Help'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => Help()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFF389EB4)),
-            title: const Text('Privacy Policy'),
-            onTap: () {
-              Navigator.pop(context);
-              _launchPrivacypolicy();
-            },
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.share, color: Color(0xFF389EB4)),
-            title: const Text('Share'),
-            onTap: () {
-              Share.share(
-                'Smart Silent - A Silent Scheduler App. Please visit https://play.google.com/store/apps/details?id=com.kawiish.smartsilentt and download and enjoy this awesome app.',
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.star_outline, color: Color(0xFF389EB4)),
-            title: const Text('Rate Us'),
-            onTap: () {
-              StoreRedirect.redirect(androidAppId: "com.kawiish.smartsilentt");
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.apps, color: Color(0xFF389EB4)),
-            title: const Text('More Apps'),
-            onTap: _launchPlayStore,
+
+          // Drawer Footer
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.favorite_rounded, color: Color(0xFFEF4444), size: 14),
+                SizedBox(width: 6),
+                Text(
+                  'Crafted for Peaceful Worship',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBgColor,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(icon, color: iconColor, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (trailing != null)
+                  trailing
+                else
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: Color(0xFFCBD5E1)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// Custom Painter for top organic mint curve background (Image 1 top right)
+// Custom Painter for top organic curve background dynamically matching active prayer ambiance
 class _TopMintCurvePainter extends CustomPainter {
+  final int prayerIndex;
+  _TopMintCurvePainter({this.prayerIndex = 1});
+
+  static const List<List<Color>> _curveGradients = [
+    [Color(0xFFE2E8F0), Color(0xFFCBD5E1), Colors.white], // Fajr
+    [Color(0xFFE8FAF2), Color(0xFFC8F6E4), Colors.white], // Zohar
+    [Color(0xFFFEF3C7), Color(0xFFFDE68A), Colors.white], // Asr
+    [Color(0xFFF3E8FF), Color(0xFFE9D5FF), Colors.white], // Maghrib
+    [Color(0xFFE0E7FF), Color(0xFFC7D2FE), Colors.white], // Isha
+  ];
+
   @override
   void paint(Canvas canvas, Size size) {
+    final colors = _curveGradients[prayerIndex.clamp(0, 4)];
     final paint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFFE8FAF2), Color(0xFFC8F6E4), Colors.white],
-        stops: [0.0, 0.6, 1.0],
+      ..shader = LinearGradient(
+        colors: colors,
+        stops: const [0.0, 0.6, 1.0],
         begin: Alignment.topRight,
         end: Alignment.bottomLeft,
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
@@ -1704,49 +2218,98 @@ class _TopMintCurvePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _TopMintCurvePainter oldDelegate) =>
+      oldDelegate.prayerIndex != prayerIndex;
 }
 
-// Custom Painter for Mosque vector silhouette and sun glow inside Prayer banner card
+// Custom Painter for Mosque vector silhouette, Sun/Moon, and Stars inside Prayer banner card
 class _MosqueArtPainter extends CustomPainter {
+  final int prayerIndex;
+  _MosqueArtPainter({this.prayerIndex = 1});
+
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Sun glow in upper right
-    final sunCenter = Offset(size.width * 0.82, size.height * 0.28);
-    final sunGlow = Paint()
-      ..color = const Color(0xFFFBE07A).withOpacity(0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
-    canvas.drawCircle(sunCenter, 28, sunGlow);
+    final rightBase = size.width;
+    final bottom = size.height;
 
-    final sunCore = Paint()..color = const Color(0xFFFFF19E).withOpacity(0.5);
-    canvas.drawCircle(sunCenter, 14, sunCore);
+    // 1. Celestial Bodies & Atmosphere per Prayer
+    if (prayerIndex == 0) {
+      // Fajr: Morning star (Venus) & early dawn crescent & soft dawn horizon
+      final starCenter = Offset(rightBase - 48, 28);
+      _drawTwinklingStar(canvas, starCenter, 7, Colors.white.withOpacity(0.9));
+      _drawCrescentMoon(canvas, Offset(rightBase - 85, 32), 10, Colors.white.withOpacity(0.7));
 
-    // 2. Mosque outline strokes in soft white/mint
+      final dawnGlow = Paint()
+        ..shader = LinearGradient(
+          colors: [const Color(0xFF6DD5ED).withOpacity(0.22), Colors.transparent],
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+        ).createShader(Rect.fromLTWH(0, bottom - 60, size.width, 60));
+      canvas.drawRect(Rect.fromLTWH(0, bottom - 60, size.width, 60), dawnGlow);
+    } else if (prayerIndex == 1) {
+      // Zohar: High overhead sun with bright radiant aura
+      final sunCenter = Offset(rightBase - 65, 34);
+      final sunGlow = Paint()
+        ..color = const Color(0xFFFFF19E).withOpacity(0.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26);
+      canvas.drawCircle(sunCenter, 32, sunGlow);
+
+      final sunCore = Paint()..color = const Color(0xFFFFFBEB).withOpacity(0.7);
+      canvas.drawCircle(sunCenter, 14, sunCore);
+    } else if (prayerIndex == 2) {
+      // Asr: Warm golden afternoon sun descending on right
+      final sunCenter = Offset(rightBase - 60, 48);
+      final sunGlow = Paint()
+        ..color = const Color(0xFFF59E0B).withOpacity(0.4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
+      canvas.drawCircle(sunCenter, 34, sunGlow);
+
+      final sunCore = Paint()..color = const Color(0xFFFEF3C7).withOpacity(0.85);
+      canvas.drawCircle(sunCenter, 16, sunCore);
+    } else if (prayerIndex == 3) {
+      // Maghrib: Sunset dusk horizon glow and evening star
+      final sunsetGlow = Paint()
+        ..shader = LinearGradient(
+          colors: [const Color(0xFFF43F5E).withOpacity(0.35), Colors.transparent],
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+        ).createShader(Rect.fromLTWH(0, bottom - 65, size.width, 65));
+      canvas.drawRect(Rect.fromLTWH(0, bottom - 65, size.width, 65), sunsetGlow);
+
+      _drawTwinklingStar(canvas, Offset(rightBase - 50, 24), 6, Colors.white.withOpacity(0.85));
+      _drawTwinklingStar(canvas, Offset(rightBase - 90, 42), 4, Colors.white.withOpacity(0.65));
+    } else {
+      // Isha: Night celestial sky with glowing crescent moon and twinkling stars
+      final moonCenter = Offset(rightBase - 55, 32);
+      _drawCrescentMoon(canvas, moonCenter, 13, Colors.white.withOpacity(0.92));
+      _drawTwinklingStar(canvas, Offset(rightBase - 88, 22), 5, Colors.white.withOpacity(0.8));
+      _drawTwinklingStar(canvas, Offset(rightBase - 30, 52), 4, Colors.white.withOpacity(0.7));
+      _drawTwinklingStar(canvas, Offset(rightBase - 110, 48), 3.5, Colors.white.withOpacity(0.6));
+    }
+
+    // 2. Architectural Mosque Outlines & Silhouettes
     final linePaint = Paint()
       ..color = Colors.white.withOpacity(0.38)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 
     final fillPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
+      ..color = Colors.white.withOpacity(0.09)
       ..style = PaintingStyle.fill;
-
-    final rightBase = size.width;
-    final bottom = size.height;
 
     // Central Dome
     final domeRect = Rect.fromCenter(
       center: Offset(rightBase - 70, bottom - 30),
-      width: 52,
-      height: 54,
+      width: 54,
+      height: 56,
     );
     canvas.drawArc(domeRect, 3.14, 3.14, false, linePaint);
+    canvas.drawArc(domeRect, 3.14, 3.14, false, fillPaint);
 
     // Minaret 1 (Left of dome)
     final minaret1X = rightBase - 105;
     canvas.drawRect(Rect.fromLTWH(minaret1X, bottom - 85, 12, 85), fillPaint);
     canvas.drawRect(Rect.fromLTWH(minaret1X, bottom - 85, 12, 85), linePaint);
-    // Minaret 1 top spire
     final spire1 = Path()
       ..moveTo(minaret1X - 2, bottom - 85)
       ..lineTo(minaret1X + 6, bottom - 104)
@@ -1758,7 +2321,6 @@ class _MosqueArtPainter extends CustomPainter {
     final minaret2X = rightBase - 28;
     canvas.drawRect(Rect.fromLTWH(minaret2X, bottom - 85, 12, 85), fillPaint);
     canvas.drawRect(Rect.fromLTWH(minaret2X, bottom - 85, 12, 85), linePaint);
-    // Minaret 2 top spire
     final spire2 = Path()
       ..moveTo(minaret2X - 2, bottom - 85)
       ..lineTo(minaret2X + 6, bottom - 104)
@@ -1770,7 +2332,6 @@ class _MosqueArtPainter extends CustomPainter {
     final wallRect = Rect.fromLTWH(minaret1X, bottom - 32, 90, 32);
     canvas.drawRect(wallRect, linePaint);
 
-    // Small arches on wall
     for (int i = 0; i < 4; i++) {
       final archX = minaret1X + 10 + (i * 18.0);
       final archPath = Path()
@@ -1782,6 +2343,35 @@ class _MosqueArtPainter extends CustomPainter {
     }
   }
 
+  void _drawCrescentMoon(Canvas canvas, Offset center, double radius, Color color) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..addArc(Rect.fromCircle(center: center, radius: radius), -math.pi * 0.5, math.pi * 1.5)
+      ..arcToPoint(
+        Offset(center.dx, center.dy - radius),
+        radius: Radius.circular(radius * 0.78),
+        clockwise: false,
+      );
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawTwinklingStar(Canvas canvas, Offset center, double radius, Color color) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(center.dx, center.dy - radius)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx + radius, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, center.dy + radius)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx - radius, center.dy)
+      ..quadraticBezierTo(center.dx, center.dy, center.dx, center.dy - radius)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MosqueArtPainter oldDelegate) =>
+      oldDelegate.prayerIndex != prayerIndex;
 }
