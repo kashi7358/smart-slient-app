@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/View/tab_bar.dart';
 import 'package:sound_mode/permission_handler.dart';
 
@@ -58,6 +59,24 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
   }
 
   Future<void> _completeOnboarding() async {
+    final bool isIgnoringBattery =
+        await DeviceCompatibilityHelper.isIgnoringBatteryOptimizations();
+
+    if (!isIgnoringBattery && mounted) {
+      DeviceCompatibilityHelper.showBatteryOptimizationDialog(
+        context: context,
+        onDone: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('showHome', true);
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const TabBarDemo()),
+          );
+        },
+      );
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showHome', true);
     if (!mounted) return;

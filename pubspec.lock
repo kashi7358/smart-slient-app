@@ -225,13 +225,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.6"
-  day_picker:
-    dependency: "direct main"
-    description:
-      path: "packages/day_picker"
-      relative: true
-    source: path
-    version: "2.1.1"
   fake_async:
     dependency: transitive
     description:
@@ -708,14 +701,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  smooth_page_indicator:
-    dependency: "direct main"
-    description:
-      name: smooth_page_indicator
-      sha256: ab2253be8d65ed7a341a43fe62d5cfba404b5969c23bc998964fe5aa8aae465c
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.0"
   sound_mode:
     dependency: "direct main"
     description:

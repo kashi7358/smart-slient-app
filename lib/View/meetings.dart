@@ -54,7 +54,11 @@ class _RepeatedState extends State<Repeated> {
   @override
   void dispose() {
     nameController.dispose();
-    _bannerAd.dispose();
+    try {
+      if (isAdLoaded) {
+        _bannerAd.dispose();
+      }
+    } catch (_) {}
     super.dispose();
   }
 
@@ -80,17 +84,6 @@ class _RepeatedState extends State<Repeated> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF389EB4), size: 26),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CreateDaily()),
-              );
-            },
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -112,103 +105,107 @@ class _RepeatedState extends State<Repeated> {
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
-                        boxShadow: const [
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: item.isTaskActivated
+                              ? const Color(0xFF389EB4).withOpacity(0.25)
+                              : const Color(0xFFE2E8F0),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
                           BoxShadow(
-                            color: Color(0x0A0F172A),
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
+                            color: item.isTaskActivated
+                                ? const Color(0xFF389EB4).withOpacity(0.08)
+                                : const Color(0x080F172A),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF389EB4).withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.business_center_rounded, color: Color(0xFF389EB4), size: 22),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 15.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E293B),
+                            // Top Row: Icon + Title + Status Badge + Switch + Popup Menu
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: item.isTaskActivated
+                                        ? const Color(0xFF389EB4).withOpacity(0.12)
+                                        : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.business_center_rounded,
+                                      color: item.isTaskActivated
+                                          ? const Color(0xFF389EB4)
+                                          : const Color(0xFF94A3B8),
+                                      size: 20,
                                     ),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Row(
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F5F9),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.access_time_rounded, size: 12, color: Color(0xFF389EB4)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              "${item.Start.hour.toString().padLeft(2, '0')}:${item.Start.minute.toString().padLeft(2, '0')} - ${item.End.hour.toString().padLeft(2, '0')}:${item.End.minute.toString().padLeft(2, '0')}",
-                                              style: const TextStyle(
-                                                color: Color(0xFF334155),
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
+                                      Text(
+                                        item.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: item.isTaskActivated
+                                              ? const Color(0xFF0F172A)
+                                              : const Color(0xFF64748B),
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        item.isSilentOrVibration ? "Vibrate" : "Silent",
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: item.isSilentOrVibration ? const Color(0xFFD97706) : const Color(0xFF0D9488),
-                                        ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: item.isTaskActivated
+                                                  ? const Color(0xFF10B981)
+                                                  : const Color(0xFF94A3B8),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            item.isTaskActivated ? 'Active' : 'Disabled',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: item.isTaskActivated
+                                                  ? const Color(0xFF10B981)
+                                                  : const Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  // Day pills
-                                  Row(
-                                    children: List.generate(7, (dayIdx) {
-                                      final dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-                                      final isSelected = days.contains(dayIdx);
-                                      return Padding(
-                                        padding: const EdgeInsets.only(right: 5),
-                                        child: Text(
-                                          dayNames[dayIdx],
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFCBD5E1),
-                                          ),
-                                        ),
-                                      );
-                                    }),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
+                                ),
+                                Switch(
+                                  value: item.isTaskActivated,
+                                  onChanged: (value) async {
+                                    setState(() => item.isTaskActivated = value);
+                                    await item.save();
+                                    await MeetingAlarmHelper.syncAllMeetings();
+                                  },
+                                  activeTrackColor: const Color(0xFF389EB4).withOpacity(0.4),
+                                  activeColor: const Color(0xFF389EB4),
+                                ),
                                 PopupMenuButton<int>(
                                   onSelected: (val) {
                                     if (val == 1) {
@@ -220,27 +217,128 @@ class _RepeatedState extends State<Repeated> {
                                   itemBuilder: (context) => [
                                     const PopupMenuItem(
                                       value: 2,
-                                      child: Text("Edit", style: TextStyle(color: Color(0xFF389EB4), fontWeight: FontWeight.bold)),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 18, color: Color(0xFF389EB4)),
+                                          SizedBox(width: 8),
+                                          Text("Edit", style: TextStyle(color: Color(0xFF389EB4), fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
                                     ),
                                     const PopupMenuItem(
                                       value: 1,
-                                      child: Text("Delete", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                          SizedBox(width: 8),
+                                          Text("Delete", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  child: const Icon(Icons.more_vert_rounded, color: Color(0xFF94A3B8)),
-                                ),
-                                Switch(
-                                  value: item.isTaskActivated,
-                                  onChanged: (value) async {
-                                    setState(() => item.isTaskActivated = value);
-                                    await item.save();
-                                    await MeetingAlarmHelper.syncAllMeetings();
-                                  },
-                                  activeTrackColor: const Color(0xFF389EB4).withOpacity(0.35),
-                                  activeColor: const Color(0xFF389EB4),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.more_vert_rounded, size: 18, color: Color(0xFF94A3B8)),
+                                  ),
                                 ),
                               ],
+                            ),
+
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+                            ),
+
+                            // Middle Row: Time pill + Vibrate/Silent badge
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.access_time_rounded, size: 13, color: Color(0xFF389EB4)),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        "${item.Start.hour.toString().padLeft(2, '0')}:${item.Start.minute.toString().padLeft(2, '0')} - ${item.End.hour.toString().padLeft(2, '0')}:${item.End.minute.toString().padLeft(2, '0')}",
+                                        style: const TextStyle(
+                                          color: Color(0xFF334155),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: item.isSilentOrVibration
+                                        ? const Color(0xFFFEF3C7)
+                                        : const Color(0xFFCCFBF1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        item.isSilentOrVibration ? Icons.vibration_rounded : Icons.volume_off_rounded,
+                                        size: 12,
+                                        color: item.isSilentOrVibration ? const Color(0xFFD97706) : const Color(0xFF0D9488),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        item.isSilentOrVibration ? "Vibrate" : "Silent",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: item.isSilentOrVibration ? const Color(0xFFD97706) : const Color(0xFF0D9488),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Bottom Row: Days pills aligned nicely across
+                            Row(
+                              children: List.generate(7, (dayIdx) {
+                                final dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+                                final isSelected = days.contains(dayIdx);
+                                return Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      dayNames[dayIdx],
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
                             ),
                           ],
                         ),
@@ -335,7 +433,8 @@ class _RepeatedState extends State<Repeated> {
 
   Widget _buildBottomQuickDailySilentWithFab(CountProvider provider) {
     final double bannerHeight = isAdLoaded ? _bannerAd.size.height.toDouble() : 0.0;
-    final double totalHeight = 160.0 + bannerHeight;
+    final double sheetHeight = 94.0 + (isAdLoaded ? bannerHeight + 10.0 : 0.0);
+    final double totalHeight = sheetHeight + 25.0;
 
     return SizedBox(
       height: totalHeight,
@@ -404,12 +503,13 @@ class _RepeatedState extends State<Repeated> {
             ),
           ),
 
-          // Raised FAB (+)
+          // Raised FAB (+) aligned comfortably right above Quick Daily card (matching Home screen)
           Positioned(
-            top: 0,
-            right: 24,
+            bottom: sheetHeight - 25.0,
+            right: 22,
             child: Material(
               color: Colors.transparent,
+              shape: const CircleBorder(),
               child: InkWell(
                 onTap: () {
                   Navigator.push(
@@ -419,25 +519,22 @@ class _RepeatedState extends State<Repeated> {
                 },
                 customBorder: const CircleBorder(),
                 child: Container(
-                  width: 54,
-                  height: 54,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF389EB4), Color(0xFF267D91)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: const Color(0xFF389EB4),
                     shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2.5),
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF389EB4).withOpacity(0.42),
-                        blurRadius: 14,
-                        offset: const Offset(0, 6),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
                   child: const Center(
-                    child: Icon(Icons.add_rounded, color: Colors.white, size: 28),
+                    child: Icon(Icons.add, color: Colors.white, size: 28),
                   ),
                 ),
               ),

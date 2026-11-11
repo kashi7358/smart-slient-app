@@ -1,6 +1,4 @@
 
-import 'package:day_picker/day_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 part 'repeated_model.g.dart';
 @HiveType(typeId: 1)

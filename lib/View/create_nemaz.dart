@@ -54,6 +54,16 @@ class _CreateNemazState extends State<CreateNemaz> {
     _loadExistingSavedTimings();
   }
 
+  @override
+  void dispose() {
+    try {
+      if (isAdLoaded) {
+        _bannerAd.dispose();
+      }
+    } catch (_) {}
+    super.dispose();
+  }
+
   void _loadHijriDate() {
     setState(() {
       hijriDateText = HijriDate.formatCurrentDate();

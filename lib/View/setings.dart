@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
+import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
 import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
 import 'package:smart_silent/View/create_nemaz.dart';
@@ -27,19 +28,46 @@ class Settings extends StatefulWidget {
   State<Settings> createState() => _SettingsState();
 }
 
-class _SettingsState extends State<Settings> {
+class _SettingsState extends State<Settings> with WidgetsBindingObserver {
   bool _isDndGranted = false;
+  bool _isBatteryOptimizedIgnored = false;
+  bool _canExactAlarms = true;
+  String _deviceManufacturer = '';
 
   @override
   void initState() {
     super.initState();
-    _checkDndStatus();
+    WidgetsBinding.instance.addObserver(this);
+    _checkAllPermissions();
   }
 
-  Future<void> _checkDndStatus() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAllPermissions();
+    }
+  }
+
+  Future<void> _checkAllPermissions() async {
     try {
-      final granted = (await PermissionHandler.permissionsGranted) ?? false;
-      if (mounted) setState(() => _isDndGranted = granted);
+      final dnd = (await PermissionHandler.permissionsGranted) ?? false;
+      final battery = await DeviceCompatibilityHelper.isIgnoringBatteryOptimizations();
+      final exact = await DeviceCompatibilityHelper.canScheduleExactAlarms();
+      final manufacturer = await DeviceCompatibilityHelper.getDeviceManufacturer();
+      if (mounted) {
+        setState(() {
+          _isDndGranted = dnd;
+          _isBatteryOptimizedIgnored = battery;
+          _canExactAlarms = exact;
+          _deviceManufacturer = manufacturer;
+        });
+      }
     } catch (_) {}
   }
 
@@ -262,11 +290,11 @@ class _SettingsState extends State<Settings> {
 
             const SizedBox(height: 24),
 
-            // Section: CORE PERMISSION
+            // Section: CORE PERMISSION & RELIABILITY
             const Padding(
               padding: EdgeInsets.only(left: 4, bottom: 8),
               child: Text(
-                'SYSTEM PERMISSIONS',
+                'SYSTEM PERMISSIONS & COMPATIBILITY',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -276,7 +304,7 @@ class _SettingsState extends State<Settings> {
               ),
             ),
 
-            // Do Not Disturb Permission Card
+            // 1. Do Not Disturb Permission Card
             _buildHumanCard(
               icon: Icons.do_not_disturb_on_rounded,
               iconColor: const Color(0xFF0284C7),
@@ -314,11 +342,120 @@ class _SettingsState extends State<Settings> {
               onTap: () async {
                 await PermissionHandler.openDoNotDisturbSetting();
                 await Future.delayed(const Duration(milliseconds: 500));
-                _checkDndStatus();
+                _checkAllPermissions();
               },
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
+
+            // 2. Battery Optimization (Unrestricted) Card
+            _buildHumanCard(
+              icon: Icons.battery_charging_full_rounded,
+              iconColor: const Color(0xFF10B981),
+              iconBgColor: const Color(0xFFD1FAE5),
+              title: 'Battery Optimization',
+              subtitle: _isBatteryOptimizedIgnored
+                  ? 'Unrestricted background active. Alarms will fire on time.'
+                  : 'Tap to allow unrestricted battery. Prevents Android from killing alarms.',
+              trailingWidget: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _isBatteryOptimizedIgnored ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isBatteryOptimizedIgnored ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                      size: 13,
+                      color: _isBatteryOptimizedIgnored ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _isBatteryOptimizedIgnored ? 'Allowed' : 'Configure',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _isBatteryOptimizedIgnored ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              onTap: () async {
+                await DeviceCompatibilityHelper.requestIgnoreBatteryOptimizations();
+                await Future.delayed(const Duration(milliseconds: 500));
+                _checkAllPermissions();
+              },
+            ),
+
+            // 3. Exact Alarms Card (Only shown if permission is missing / blocked)
+            if (!_canExactAlarms)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _buildHumanCard(
+                  icon: Icons.alarm_on_rounded,
+                  iconColor: const Color(0xFF8B5CF6),
+                  iconBgColor: const Color(0xFFEDE9FE),
+                  title: 'Exact Alarms Permission',
+                  subtitle: 'Tap to allow exact alarms so prayers & meetings trigger right on time.',
+                  trailingWidget: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 13,
+                          color: Color(0xFFD97706),
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Configure',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  onTap: () async {
+                    await DeviceCompatibilityHelper.requestScheduleExactAlarm();
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    _checkAllPermissions();
+                  },
+                ),
+              ),
+
+            const SizedBox(height: 10),
+
+            // 4. Brand Autostart & Background Guide (Only shown if manufacturer is known and supported)
+            if (_deviceManufacturer.isNotEmpty &&
+                _deviceManufacturer.toLowerCase() != 'unknown' &&
+                !_deviceManufacturer.toLowerCase().contains('unknown'))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildHumanCard(
+                  icon: Icons.phonelink_setup_rounded,
+                  iconColor: const Color(0xFFF59E0B),
+                  iconBgColor: const Color(0xFFFEF3C7),
+                  title: '$_deviceManufacturer Background Settings',
+                  subtitle: 'Allow Autostart & lock app in memory to prevent your phone from killing silent mode.',
+                  trailingWidget: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
+                  onTap: () async {
+                    await DeviceCompatibilityHelper.openAutoStartSettings();
+                  },
+                ),
+              ),
+
+            const SizedBox(height: 10),
 
             // Section: SCHEDULES & SHORTCUTS
             const Padding(

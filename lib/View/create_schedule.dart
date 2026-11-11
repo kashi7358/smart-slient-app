@@ -34,7 +34,7 @@ void scheduleNormalCallback() async {
 }
 
 class CreateSchedule extends StatefulWidget {
-  CreateSchedule({super.key});
+  const CreateSchedule({super.key});
 
   @override
   State<CreateSchedule> createState() => _CreateScheduleState();
@@ -224,6 +224,19 @@ class _CreateScheduleState extends State<CreateSchedule> {
         exact: true,
         wakeup: true,
       );
+    } catch (_) {
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          startDateTime,
+          alarmIdStart,
+          isVibrateMode ? scheduleVibrateCallback : scheduleSilentCallback,
+          exact: false,
+          wakeup: true,
+        );
+      } catch (_) {}
+    }
+
+    try {
       await AndroidAlarmManager.oneShotAt(
         endDateTime,
         alarmIdEnd,
@@ -231,7 +244,17 @@ class _CreateScheduleState extends State<CreateSchedule> {
         exact: true,
         wakeup: true,
       );
-    } catch (_) {}
+    } catch (_) {
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          endDateTime,
+          alarmIdEnd,
+          scheduleNormalCallback,
+          exact: false,
+          wakeup: true,
+        );
+      } catch (_) {}
+    }
 
     Fluttertoast.showToast(
       msg: "Schedule created successfully!",

@@ -65,6 +65,11 @@ class _CreateDailyState extends State<CreateDaily> {
   @override
   void dispose() {
     nameController.dispose();
+    try {
+      if (isAdLoaded) {
+        _bannerAd.dispose();
+      }
+    } catch (_) {}
     super.dispose();
   }
 

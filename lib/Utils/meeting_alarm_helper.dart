@@ -63,6 +63,35 @@ class MeetingAlarmHelper {
   static const int _baseEndId = 20001;
   static const int maxSlots = 10;
 
+  // Safe alarm scheduler with Android 12-15 fallback
+  static Future<void> _safeOneShotAt(
+    DateTime time,
+    int id,
+    Function callback,
+  ) async {
+    try {
+      await AndroidAlarmManager.oneShotAt(
+        time,
+        id,
+        callback,
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true,
+      );
+    } catch (_) {
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          time,
+          id,
+          callback,
+          exact: false,
+          wakeup: true,
+          rescheduleOnReboot: true,
+        );
+      } catch (_) {}
+    }
+  }
+
   static final List<Function> _startCallbacks = [
     meetingStart0,
     meetingStart1,
@@ -132,13 +161,10 @@ class MeetingAlarmHelper {
       final tomorrowStart = DateTime(now.year, now.month, now.day + 1, startH, startM);
 
       final startAlarmId = _baseStartId + (slot * 2);
-      await AndroidAlarmManager.oneShotAt(
+      await _safeOneShotAt(
         tomorrowStart,
         startAlarmId,
         _startCallbacks[slot],
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
       );
     } catch (_) {}
   }
@@ -174,13 +200,10 @@ class MeetingAlarmHelper {
       final tomorrowEnd = DateTime(now.year, now.month, now.day + 1, endH, endM);
 
       final endAlarmId = _baseEndId + (slot * 2);
-      await AndroidAlarmManager.oneShotAt(
+      await _safeOneShotAt(
         tomorrowEnd,
         endAlarmId,
         _endCallbacks[slot],
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
       );
     } catch (_) {}
   }
@@ -226,26 +249,20 @@ class MeetingAlarmHelper {
             try {
               await AndroidAlarmManager.cancel(startAlarmId);
             } catch (_) {}
-            await AndroidAlarmManager.oneShotAt(
+            await _safeOneShotAt(
               targetStart,
               startAlarmId,
               _startCallbacks[slot],
-              exact: true,
-              wakeup: true,
-              rescheduleOnReboot: true,
             );
 
             // Schedule end alarm
             try {
               await AndroidAlarmManager.cancel(endAlarmId);
             } catch (_) {}
-            await AndroidAlarmManager.oneShotAt(
+            await _safeOneShotAt(
               targetEnd,
               endAlarmId,
               _endCallbacks[slot],
-              exact: true,
-              wakeup: true,
-              rescheduleOnReboot: true,
             );
             continue;
           }

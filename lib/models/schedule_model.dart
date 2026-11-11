@@ -1,5 +1,4 @@
 
-import 'package:day_picker/day_picker.dart';
 import 'package:hive/hive.dart';
 part 'schedule_model.g.dart';
 @HiveType(typeId: 0)

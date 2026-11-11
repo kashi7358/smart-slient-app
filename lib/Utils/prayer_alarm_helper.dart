@@ -69,6 +69,35 @@ void ishaEndCallback() async {
 }
 
 class PrayerAlarmHelper {
+  // Safe alarm scheduler with Android 12-15 fallback
+  static Future<void> _safeOneShotAt(
+    DateTime time,
+    int id,
+    Function callback,
+  ) async {
+    try {
+      await AndroidAlarmManager.oneShotAt(
+        time,
+        id,
+        callback,
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true,
+      );
+    } catch (_) {
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          time,
+          id,
+          callback,
+          exact: false,
+          wakeup: true,
+          rescheduleOnReboot: true,
+        );
+      } catch (_) {}
+    }
+  }
+
   // Handles prayer start: sets Silent / Vibrate and re-arms for tomorrow
   static Future<void> handlePrayerStart(int alarmId, String prayerKey, Function callback) async {
     try {
@@ -100,14 +129,7 @@ class PrayerAlarmHelper {
       final now = DateTime.now();
       final tomorrow = DateTime(now.year, now.month, now.day + 1, hour, minute);
 
-      await AndroidAlarmManager.oneShotAt(
-        tomorrow,
-        alarmId,
-        callback,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-      );
+      await _safeOneShotAt(tomorrow, alarmId, callback);
     } catch (_) {}
   }
 
@@ -129,14 +151,7 @@ class PrayerAlarmHelper {
       final now = DateTime.now();
       final tomorrow = DateTime(now.year, now.month, now.day + 1, hour, minute);
 
-      await AndroidAlarmManager.oneShotAt(
-        tomorrow,
-        alarmId,
-        callback,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-      );
+      await _safeOneShotAt(tomorrow, alarmId, callback);
     } catch (_) {}
   }
 
@@ -233,24 +248,10 @@ class PrayerAlarmHelper {
       }
 
       // Schedule Start Alarm
-      await AndroidAlarmManager.oneShotAt(
-        targetStart,
-        startAlarmId,
-        startCb,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-      );
+      await _safeOneShotAt(targetStart, startAlarmId, startCb);
 
       // Schedule End Alarm
-      await AndroidAlarmManager.oneShotAt(
-        targetEnd,
-        endAlarmId,
-        endCb,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-      );
+      await _safeOneShotAt(targetEnd, endAlarmId, endCb);
     }
 
     // 4. If current time is inside prayer time, turn on silent/vibrate right now!
