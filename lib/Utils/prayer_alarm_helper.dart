@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:sound_mode/sound_mode.dart';
 import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
@@ -107,43 +108,41 @@ class PrayerAlarmHelper {
 
       final isVibrate = prefs.getBool('prayer_vibrate_mode') ?? false;
 
-      // 1. Set Silent or Vibrate mode
-      if (isVibrate) {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-        } catch (_) {}
-      } else {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.silent);
-        } catch (_) {
-          // If DND permission is missing or restricted, fallback to Vibrate so device is never loud!
-          try {
-            await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-          } catch (_) {}
-        }
+      // 1. Calculate end time for this prayer window
+      final now = DateTime.now();
+      final endHour = prefs.getInt('${prayerKey}_end_h') ?? 5;
+      final endMinute = prefs.getInt('${prayerKey}_end_m') ?? 40;
+      DateTime prayerEndTime = DateTime(now.year, now.month, now.day, endHour, endMinute);
+      if (prayerEndTime.isBefore(now)) {
+        prayerEndTime = prayerEndTime.add(const Duration(days: 1));
       }
+
+      // Enter tracked silent window (respects user manual override)
+      await SoundControlHelper.enterSilentWindow(
+        sourceId: 'prayer_$prayerKey',
+        endTime: prayerEndTime,
+        vibrate: isVibrate,
+        endAlarmId: alarmId + 1,
+      );
 
       // 2. Re-arm for tomorrow at the exact same hour and minute
       final hour = prefs.getInt('${prayerKey}_start_h') ?? 5;
       final minute = prefs.getInt('${prayerKey}_start_m') ?? 19;
-      final now = DateTime.now();
       final tomorrow = DateTime(now.year, now.month, now.day + 1, hour, minute);
 
       await _safeOneShotAt(tomorrow, alarmId, callback);
     } catch (_) {}
   }
 
-  // Handles prayer end: sets Normal mode and re-arms for tomorrow
+  // Handles prayer end: leaves silent window and re-arms for tomorrow
   static Future<void> handlePrayerEnd(int alarmId, String prayerKey, Function callback) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('prayer_alarms_enabled') ?? true;
       if (!enabled) return;
 
-      // 1. Set Normal mode
-      try {
-        await SoundMode.setSoundMode(RingerModeStatus.normal);
-      } catch (_) {}
+      // 1. Leave this prayer window (only restores Normal mode if no other window is active)
+      await SoundControlHelper.leaveSilentWindow(sourceId: 'prayer_$prayerKey');
 
       // 2. Re-arm for tomorrow at the exact same hour and minute
       final hour = prefs.getInt('${prayerKey}_end_h') ?? 5;
@@ -168,6 +167,7 @@ class PrayerAlarmHelper {
     required TimeOfDay ishaStart,
     required TimeOfDay ishaEnd,
     required bool isVibrateMode,
+    bool applyImmediateIfInside = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -254,19 +254,24 @@ class PrayerAlarmHelper {
       await _safeOneShotAt(targetEnd, endAlarmId, endCb);
     }
 
-    // 4. If current time is inside prayer time, turn on silent/vibrate right now!
-    if (isCurrentlyInsideAnyPrayer) {
-      if (isVibrateMode) {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-        } catch (_) {}
-      } else {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.silent);
-        } catch (_) {
-          try {
-            await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-          } catch (_) {}
+    // 4. Only apply immediate silent/vibrate when explicitly saving timings,
+    // never on passive app launch/resume (so manual overrides stay respected).
+    if (applyImmediateIfInside && isCurrentlyInsideAnyPrayer) {
+      for (final cfg in prayersConfig) {
+        final startTod = cfg['start'] as TimeOfDay;
+        final endTod = cfg['end'] as TimeOfDay;
+        final key = cfg['key'] as String;
+        final endId = cfg['endId'] as int;
+        final sTime = DateTime(now.year, now.month, now.day, startTod.hour, startTod.minute);
+        final eTime = DateTime(now.year, now.month, now.day, endTod.hour, endTod.minute);
+        if ((now.isAfter(sTime) || now.isAtSameMomentAs(sTime)) && now.isBefore(eTime)) {
+          await SoundControlHelper.enterSilentWindow(
+            sourceId: 'prayer_$key',
+            endTime: eTime,
+            vibrate: isVibrateMode,
+            endAlarmId: endId,
+          );
+          break;
         }
       }
     }
@@ -283,16 +288,18 @@ class PrayerAlarmHelper {
       } catch (_) {}
     }
 
-    try {
-      await SoundMode.setSoundMode(RingerModeStatus.normal);
-    } catch (_) {}
+    for (final key in ['fajr', 'zohar', 'asar', 'magrib', 'isha']) {
+      await SoundControlHelper.leaveSilentWindow(sourceId: 'prayer_$key');
+    }
   }
 
   // Verify and re-ensure alarms on app launch/resume
   static Future<void> verifyAlarmsOnAppLaunch() async {
     final prefs = await SharedPreferences.getInstance();
-    final enabled = prefs.getBool('prayer_alarms_enabled') ?? false;
-    if (!enabled) return;
+    final enabled = prefs.getBool('prayer_alarms_enabled');
+
+    // If explicitly disabled by user in Settings, do not re-schedule
+    if (enabled == false) return;
 
     final fajarStart = TimeOfDay(hour: prefs.getInt('fajr_start_h') ?? 5, minute: prefs.getInt('fajr_start_m') ?? 19);
     final fajarEnd = TimeOfDay(hour: prefs.getInt('fajr_end_h') ?? 5, minute: prefs.getInt('fajr_end_m') ?? 40);
@@ -323,6 +330,7 @@ class PrayerAlarmHelper {
       ishaStart: ishaStart,
       ishaEnd: ishaEnd,
       isVibrateMode: isVibrate,
+      applyImmediateIfInside: false,
     );
   }
 }

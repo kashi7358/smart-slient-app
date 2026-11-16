@@ -17,6 +17,17 @@ class DeviceCompatibilityHelper {
     }
   }
 
+  /// Check whether DND (Do Not Disturb) access is granted natively on Android 11+
+  static Future<bool> hasDndPermission() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final bool? result = await _channel.invokeMethod<bool>('hasDndPermission');
+      return result ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Request exact alarm permission in system settings (Android 12+)
   static Future<void> requestScheduleExactAlarm() async {
     if (!Platform.isAndroid) return;
@@ -108,10 +119,14 @@ class DeviceCompatibilityHelper {
   static void showBatteryOptimizationDialog({
     required BuildContext context,
     VoidCallback? onDone,
+    VoidCallback? onAllowStarted,
   }) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogCtx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         titlePadding: const EdgeInsets.fromLTRB(22, 22, 22, 12),
         contentPadding: const EdgeInsets.symmetric(horizontal: 22),
@@ -179,8 +194,11 @@ class DeviceCompatibilityHelper {
             ),
             onPressed: () async {
               Navigator.pop(dialogCtx);
+              onAllowStarted?.call();
               await requestIgnoreBatteryOptimizations();
-              onDone?.call();
+              if (onAllowStarted == null) {
+                onDone?.call();
+              }
             },
             child: const Text('Allow Unrestricted', style: TextStyle(fontWeight: FontWeight.bold)),
           ),

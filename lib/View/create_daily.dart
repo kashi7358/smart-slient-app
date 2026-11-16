@@ -8,7 +8,9 @@ import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
 import '../Boxes/boxes.dart';
 
 class CreateDaily extends StatefulWidget {
-  const CreateDaily({super.key});
+  final RepeatedModel? existingSchedule;
+
+  const CreateDaily({super.key, this.existingSchedule});
 
   @override
   State<CreateDaily> createState() => _CreateDailyState();
@@ -59,6 +61,28 @@ class _CreateDailyState extends State<CreateDaily> {
   @override
   void initState() {
     super.initState();
+    final existing = widget.existingSchedule;
+    if (existing != null) {
+      nameController.text = existing.name;
+      startTime = TimeOfDay(
+        hour: existing.Start.hour,
+        minute: existing.Start.minute,
+      );
+      endTime = TimeOfDay(
+        hour: existing.End.hour,
+        minute: existing.End.minute,
+      );
+      isVibrateMode = existing.isSilentOrVibration;
+      _selectedDays.clear();
+      final days = existing.dayInWeek;
+      if (days != null && days.isNotEmpty) {
+        for (final d in days) {
+          if (d is num) _selectedDays.add(d.toInt());
+        }
+      } else {
+        _selectedDays.addAll([0, 1, 2, 3, 4, 5, 6]);
+      }
+    }
     initBannerAd();
   }
 
@@ -115,6 +139,34 @@ class _CreateDailyState extends State<CreateDaily> {
     final now = DateTime.now();
     final startDateTime = DateTime(now.year, now.month, now.day, startTime.hour, startTime.minute);
     final endDateTime = DateTime(now.year, now.month, now.day, endTime.hour, endTime.minute);
+    final List<int> sortedDays = _selectedDays.toList()..sort();
+
+    final existing = widget.existingSchedule;
+    final box = Boxes.getDataforDaily();
+
+    if (existing != null) {
+      existing.name = name;
+      existing.Start = startDateTime;
+      existing.End = endDateTime;
+      existing.isSilentOrVibration = isVibrateMode;
+      existing.dayInWeek = sortedDays;
+      if (existing.isInBox) {
+        await existing.save();
+      } else {
+        await box.add(existing);
+      }
+      await MeetingAlarmHelper.syncAllMeetings();
+
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: "Meeting Schedule Updated Successfully!",
+          backgroundColor: const Color(0xFF389EB4),
+          textColor: Colors.white,
+        );
+        Navigator.pop(context, true);
+      }
+      return;
+    }
 
     final data = RepeatedModel(
       name: name,
@@ -122,10 +174,9 @@ class _CreateDailyState extends State<CreateDaily> {
       End: endDateTime,
       isSilentOrVibration: isVibrateMode,
       isTaskActivated: true,
-      dayInWeek: _selectedDays.toList()..sort(),
+      dayInWeek: sortedDays,
     );
 
-    final box = Boxes.getDataforDaily();
     await box.add(data);
     await MeetingAlarmHelper.syncAllMeetings();
 
@@ -135,7 +186,7 @@ class _CreateDailyState extends State<CreateDaily> {
         backgroundColor: const Color(0xFF389EB4),
         textColor: Colors.white,
       );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     }
   }
 
@@ -156,9 +207,11 @@ class _CreateDailyState extends State<CreateDaily> {
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text(
-            'Create Meeting Schedule',
-            style: TextStyle(
+          title: Text(
+            widget.existingSchedule != null
+                ? 'Edit Meeting Schedule'
+                : 'Create Meeting Schedule',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Color(0xFF1E293B),
@@ -308,40 +361,44 @@ class _CreateDailyState extends State<CreateDaily> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: _daysConfig.map((day) {
                     final isSelected = _selectedDays.contains(day['index']);
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedDays.remove(day['index']);
-                          } else {
-                            _selectedDays.add(day['index']);
-                          }
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
-                          shape: BoxShape.circle,
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: const Color(0xFF389EB4).withOpacity(0.35),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ]
-                              : null,
-                        ),
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedDays.remove(day['index']);
+                            } else {
+                              _selectedDays.add(day['index']);
+                            }
+                          });
+                        },
                         child: Center(
-                          child: Text(
-                            day['label'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected ? Colors.white : const Color(0xFF475569),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFF389EB4).withOpacity(0.35),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                day['label'],
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -400,10 +457,12 @@ class _CreateDailyState extends State<CreateDaily> {
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
-                      'Save Meeting Schedule',
-                      style: TextStyle(
+                      widget.existingSchedule != null
+                          ? 'Update Meeting Schedule'
+                          : 'Save Meeting Schedule',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

@@ -4,17 +4,32 @@ import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
-import 'package:smart_silent/models/schedule_model.dart';
-import 'package:sound_mode/permission_handler.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
+import 'package:smart_silent/Utils/one_time_alarm_helper.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_schedule.dart';
+import 'package:smart_silent/models/schedule_model.dart';
 
-import '../constants.dart';
+// Public entry-points for AndroidAlarmManager forwarded to OneTimeAlarmHelper
+@pragma('vm:entry-point')
+void scheduleSilentCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
+}
+
+@pragma('vm:entry-point')
+void scheduleVibrateCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
+}
+
+@pragma('vm:entry-point')
+void scheduleNormalCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeEnd();
+}
 
 class OneTime extends StatefulWidget {
   const OneTime({super.key});
@@ -24,1175 +39,518 @@ class OneTime extends StatefulWidget {
 }
 
 class _OneTimeState extends State<OneTime> {
-  static ValueNotifier<bool> isDataAvailable = ValueNotifier<bool>(false);
-
-  bool? updateactivation;
-  bool? updateSoundMode;
-  final nameController = TextEditingController();
-  DateTime startDateTime = DateTime.now();
-  DateTime now = DateTime.now();
-  DateTime endDateTime = DateTime.now();
-  bool isTaskActivated = false;
-  bool isSilentOrVibration = false;
-  int AlarmId = 1;
-  int AlarmId2 = 2;
-  var index = 0;
-
-  late BannerAd _bannerAd;
-  bool isAdLoaded = false;
-  initBannerAd() {
-    var AdsIdd = 'ca-app-pub-9923979057032791/3153557586';
-    _bannerAd = BannerAd(
-        size: AdSize.banner,
-        adUnitId: AdsIdd,
-        listener: BannerAdListener(
-          onAdLoaded: (ad) {
-            setState(() {
-              isAdLoaded = true;
-            });
-          },
-          onAdFailedToLoad: (ad, error) {},
-        ),
-        request: AdRequest());
-    _bannerAd.load();
-  }
+  BannerAd? _bannerAd;
+  bool _isAdLoaded = false;
 
   @override
   void initState() {
-    initBannerAd();
-
-    // TODO: implement initState
     super.initState();
+    _initBannerAd();
+  }
+
+  void _initBannerAd() {
+    const String adUnitId = 'ca-app-pub-9923979057032791/3153557586';
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: adUnitId,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (mounted) setState(() => _isAdLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+        },
+      ),
+      request: const AdRequest(),
+    );
+    _bannerAd?.load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
+
+  int _getAlarmId(ScheduleModel item) {
+    return OneTimeAlarmHelper.getAlarmId(item);
+  }
+
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm';
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return 'Today';
+    }
+    final tomorrow = now.add(const Duration(days: 1));
+    if (dt.year == tomorrow.year && dt.month == tomorrow.month && dt.day == tomorrow.day) {
+      return 'Tomorrow';
+    }
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  Future<void> _toggleSchedule(ScheduleModel item, bool isActivated) async {
+    setState(() {
+      item.isTaskActivated = isActivated;
+    });
+    await item.save();
+
+    if (isActivated) {
+      await OneTimeAlarmHelper.scheduleOneTime(item);
+      Fluttertoast.showToast(
+        msg: "Schedule activated",
+        backgroundColor: const Color(0xFF389EB4),
+        textColor: Colors.white,
+      );
+    } else {
+      await OneTimeAlarmHelper.cancelOneTime(item);
+      Fluttertoast.showToast(
+        msg: "Schedule deactivated",
+        backgroundColor: const Color(0xFF64748B),
+        textColor: Colors.white,
+      );
+    }
+  }
+
+  Future<void> _deleteSchedule(ScheduleModel item) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          title: const Row(
+            children: [
+              Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 24),
+              SizedBox(width: 10),
+              Text(
+                'Delete Schedule?',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to delete "${item.name}"? This action cannot be undone.',
+            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B), height: 1.4),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    await OneTimeAlarmHelper.cancelOneTime(item);
+    await item.delete();
+
+    if (mounted) {
+      final box = Boxes.getData();
+      Provider.of<CountProvider>(context, listen: false).updateHasData(box.isNotEmpty);
+    }
+
+    Fluttertoast.showToast(
+      msg: "Schedule deleted",
+      backgroundColor: const Color(0xFF389EB4),
+      textColor: Colors.white,
+    );
+  }
+
+  void _openCreateOrEditScreen([ScheduleModel? schedule]) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CreateSchedule(scheduleToEdit: schedule)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<CountProvider>(context);
-
-    return Scaffold(
-      backgroundColor: AppColors.kbg,
-      body: Stack(
-        children: [
-          Container(
-              child: ValueListenableBuilder<Box<ScheduleModel>>(
-            valueListenable: Boxes.getData().listenable(),
-            builder: (context, box, _) {
-              if (box.length > 0) {
-                // isDataAvailable.value = true;
-                isDataAvailable.value = true;
-                print("::if database has value${isDataAvailable.value}");
-                // provider.updateHasData(box.isNotEmpty);
-
-                return ListView.builder(
-                  itemCount: box.length,
-                  // reverse: true,
-                  // shrinkWrap: true,
-                  itemBuilder: (context, index) {
-                    var data = box.values.toList().cast<ScheduleModel>();
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: InkWell(
-                          onTap: () {
-                            _update(
-                              data[index],
-                              data[index].name.toString(),
-                              data[index].Start.toString(),
-                              data[index].End.toString(),
-                              data[index].isSilentOrVibration,
-                              data[index].isTaskActivated,
-                            );
-                          },
-                          onLongPress: () {
-                            showDialog(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return AlertDialog(
-                                    backgroundColor: AppColors.kSecondary,
-                                    title: Text("Delete"),
-                                    content: Text("Are You Sure?"),
-                                    actions: [
-                                      TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(context);
-                                          },
-                                          child: Text("No",
-                                              style: TextStyle(
-                                                  color: AppColors.kPrimary))),
-                                      TextButton(
-                                          onPressed: () {
-                                            deleteTask(data[index]);
-                                            provider.updateHasData(box.isNotEmpty);
-                                            AndroidAlarmManager.cancel(AlarmId);
-                                            AndroidAlarmManager.cancel(
-                                                AlarmId2);
-                                            Navigator.pop(context);
-                                          },
-                                          child: Text("Yes",
-                                              style: TextStyle(
-                                                  color: AppColors.kPrimary)))
-                                    ],
-                                  );
-                                });
-                          },
-                          child: Row(
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 30,
-                                  ),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.share_arrival_time_outlined),
-                                      SizedBox(
-                                        width: 8,
-                                      ),
-                                      SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: Text(
-                                              data[index].name.toString())),
-                                    ],
-                                  ),
-                                  SizedBox(
-                                    height: 8,
-                                  ),
-                                  Text(
-                                    "Start: ${data[index].Start.hour.toString().padLeft(2, '0')}:${data[index].Start.minute.toString().padLeft(2, '0')}  ${data[index].Start.day.toString()}/${data[index].Start.month.toString()}/${data[index].Start.year.toString()}",
-                                    style: TextStyle(
-                                        color: AppColors.kPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
-                                  ),
-                                  SizedBox(
-                                    height: 4,
-                                  ),
-                                  Text(
-                                    "End:   ${data[index].End.hour.toString().padLeft(2, '0')}:${data[index].End.minute.toString().padLeft(2, '0')}  ${data[index].End.day.toString()}/${data[index].End.month.toString()}/${data[index].End.year.toString()}",
-                                    style: TextStyle(
-                                        color: AppColors.kPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
-                                  ),
-                                ],
-                              ),
-                              Spacer(),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  PopupMenuButton<int>(
-                                    onSelected: (value) {
-                                      if (value == 1) {
-                                        deleteTask(data[index]);
-                                        provider.updateHasData(box.isNotEmpty);
-                                        AndroidAlarmManager.cancel(AlarmId);
-                                        AndroidAlarmManager.cancel(AlarmId2);
-                                      } else if (value == 2) {
-                                        _update(
-                                          data[index],
-                                          data[index].name.toString(),
-                                          data[index].Start.toString(),
-                                          data[index].End.toString(),
-                                          data[index].isSilentOrVibration,
-                                          data[index].isTaskActivated,
-                                        );
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem(
-                                        value: 1,
-                                        child: Text(
-                                          "Delete",
-                                          style: TextStyle(
-                                              color: AppColors.kPrimary),
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 2,
-                                        child: Text(
-                                          "Update",
-                                          style: TextStyle(
-                                              color: AppColors.kPrimary),
-                                        ),
-                                      ),
-                                    ],
-                                    color: AppColors.kSecondary,
-                                    child: const Icon(Icons.more_vert),
-                                  ),
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 70,
-                                  ),
-                                  Switch(
-                                    value: data[index].isTaskActivated,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        data[index].isTaskActivated = value;
-                                      });
-
-                                      if (data[index].isTaskActivated == true &&
-                                          data[index].isSilentOrVibration ==
-                                              false) {
-                                        AndroidAlarmManager.oneShotAt(
-                                            data[index].Start,
-                                            AlarmId,
-                                            setSilentMode);
-                                        print("at Silent mode");
-                                      } else if (data[index].isTaskActivated ==
-                                              true &&
-                                          data[index].isSilentOrVibration ==
-                                              true) {
-                                        AndroidAlarmManager.oneShotAt(
-                                            data[index].Start,
-                                            AlarmId,
-                                            setVibrateMode);
-                                        print("at vibration mode");
-                                      }
-                                      if (data[index].isTaskActivated ==
-                                          false) {
-                                        AndroidAlarmManager.oneShot(
-                                            Duration(seconds: 0),
-                                            AlarmId,
-                                            setNormalMode);
-                                      }
-                                      print("before  normal mode");
-                                      // if(data[index].isTaskActivated== true && now == data[index].End ){
-                                      AndroidAlarmManager.oneShotAt(
-                                          data[index].End,
-                                          AlarmId2,
-                                          setNormalMode);
-                                      // AndroidAlarmManager.cancel(AlarmId);
-                                      // }
-                                      print("after normal mode");
-
-                                      updateActivation(data[index],
-                                          data[index].isTaskActivated);
-
-                                      //to delete
-                                      AndroidAlarmManager.oneShotAt(
-                                          data[index].End,
-                                          AlarmId2,
-                                          setNormalMode);
-                                    },
-                                    activeTrackColor:
-                                        Color.fromARGB(255, 133, 104, 173),
-                                    activeColor: AppColors.kPrimary,
-                                  ),
-                                  Text(data[index].isTaskActivated
-                                      ? "Activated"
-                                      : "Deactivated")
-                                ],
-                              )
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              } else {
-                // isDataAvailable.value = false;
-                isDataAvailable.value = false;
-                print("::if empty ${isDataAvailable.value}");
-                return Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Center(child: Lottie.asset('assets/lottie.json')),
-                );
-              }
-              // print("if database has anything${isDataAvailable.value}");
-// return Container();
-            },
-          )),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.kPrimary,
-        onPressed: () {
-          // Navigator.push(
-          //   context,
-          //   MaterialPageRoute(
-          //       builder: (context) => CreateSchedule(
-          //             update: false,
-          //           )),
-          // );
-          showModalBottomSheet(
-              shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(25))),
-              context: context,
-              builder: (context) => BuildSheet());
-        },
-        child: Icon(
-          Icons.add,
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
-      bottomNavigationBar: FittedBox(
-        fit: BoxFit.fill,
-        child: Container(
-          alignment: Alignment.bottomCenter,
-          height: isAdLoaded
-              ? _bannerAd.size.height.toDouble() +
-                  MediaQuery.of(context).size.height / 8.5
-              : MediaQuery.of(context).size.height / 8.5,
-          padding: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.kSecondary,
-            borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0.5,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
+            onPressed: () => Navigator.pop(context),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text("Quick Silent",
-                            style: TextStyle(
-                              color: Colors.black,
-                            )))
-                  ],
-                ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 5m",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 5),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 5);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("5 min",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 10m",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 10),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 10);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("10 min",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 30m",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 30),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 30);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("30 min",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 1 hour",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 60),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 60);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("1 hour",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 2 hours",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 120),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 120);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("2 hours",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick 3 hours",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute + 180),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: 180);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          provider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(6.0),
-                          child: Center(
-                            child: Container(
-                                padding: EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.kPrimary,
-                                  borderRadius: BorderRadius.all(
-                                    Radius.circular(30),
-                                  ),
-                                ),
-                                child: Text("3 hours",
-                                    style: TextStyle(color: AppColors.kbg))),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    isAdLoaded
-                        ? Container(
-                            decoration:
-                                BoxDecoration(color: Colors.transparent),
-                            height: _bannerAd.size.height.toDouble(),
-                            width: _bannerAd.size.width.toDouble(),
-                            child: AdWidget(ad: _bannerAd),
-                          )
-                        : SizedBox(),
-                  ],
-                )
-              ],
+          title: const Text(
+            'One-Time Schedules',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
             ),
           ),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF389EB4), size: 26),
+              tooltip: 'Add Schedule',
+              onPressed: () => _openCreateOrEditScreen(),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ValueListenableBuilder<Box<ScheduleModel>>(
+                valueListenable: Boxes.getData().listenable(),
+                builder: (context, box, _) {
+                  final schedules = box.values.toList().cast<ScheduleModel>();
+
+                  if (schedules.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  // Sort schedules by start time descending (newest first)
+                  schedules.sort((a, b) => b.Start.compareTo(a.Start));
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: schedules.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final item = schedules[index];
+                      return _buildScheduleCard(item);
+                    },
+                  );
+                },
+              ),
+            ),
+
+            // Banner Ad at Bottom
+            if (_isAdLoaded && _bannerAd != null)
+              Container(
+                alignment: Alignment.center,
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                color: Colors.white,
+                child: AdWidget(ad: _bannerAd!),
+              ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _openCreateOrEditScreen(),
+          backgroundColor: const Color(0xFF389EB4),
+          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+          label: const Text(
+            'New Schedule',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          elevation: 4,
         ),
       ),
     );
   }
 
-  void deleteTask(ScheduleModel scheduleModel) async {
-    await scheduleModel.delete();
-    AndroidAlarmManager.oneShot(Duration(seconds: 0), AlarmId2, setNormalMode);
-    AndroidAlarmManager.oneShot(Duration(seconds: 0), AlarmId, setNormalMode);
-    AndroidAlarmManager.cancel(AlarmId);
-    AndroidAlarmManager.cancel(AlarmId2);
+  Widget _buildEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: const Color(0xFF389EB4).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.event_note_rounded,
+                  color: Color(0xFF389EB4),
+                  size: 46,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No One-Time Schedules',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Set a one-time quiet period for a specific appointment, exam, lecture, or quiet time.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748B),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF389EB4),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                elevation: 2,
+              ),
+              onPressed: () => _openCreateOrEditScreen(),
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text(
+                'Create One-Time Schedule',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  void updateActivation(ScheduleModel scheduleModel, bool activate) async {
-    updateactivation = activate;
-    scheduleModel.isTaskActivated = updateactivation!;
-    await scheduleModel.save();
-  }
+  Widget _buildScheduleCard(ScheduleModel item) {
+    final now = DateTime.now();
+    final bool isExpired = item.End.isBefore(now);
+    final bool isCurrentlyActive = item.isTaskActivated &&
+        (now.isAfter(item.Start) || now.isAtSameMomentAs(item.Start)) &&
+        now.isBefore(item.End);
 
-  void updateSilentMode(ScheduleModel scheduleModel, bool activate) async {
-    updateSoundMode = activate;
-    scheduleModel.isSilentOrVibration = updateSoundMode!;
-    await scheduleModel.save();
-  }
-
-  void updateSoundModee(ScheduleModel scheduleModel, bool activate) async {
-    updateSoundMode = activate;
-    scheduleModel.isSilentOrVibration = updateSoundMode!;
-    await scheduleModel.save();
-  }
-
-  Future<void> _update(ScheduleModel scheduleModel, String name, String Start,
-      String End, bool isSorV, bool isTaskActivatedd) async {
-    nameController.text = name;
-    isSilentOrVibration = isSorV;
-    isTaskActivated = isTaskActivatedd;
-
-    return showDialog(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            backgroundColor: AppColors.kSecondary,
-            title: Text("Edit Schedule"),
-            content: SingleChildScrollView(
-                child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.start,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isCurrentlyActive
+              ? const Color(0xFF389EB4).withOpacity(0.6)
+              : const Color(0xFFE2E8F0),
+          width: isCurrentlyActive ? 1.5 : 1.0,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Row: Title, active badge & Switch
+            Row(
               children: [
-                TextFormField(
-                  controller: nameController,
-                  decoration: InputDecoration(hintText: "Enter Title"),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isCurrentlyActive
+                        ? const Color(0xFF389EB4).withOpacity(0.15)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    item.isSilentOrVibration ? Icons.vibration_rounded : Icons.volume_off_rounded,
+                    color: isCurrentlyActive ? const Color(0xFF389EB4) : const Color(0xFF64748B),
+                    size: 20,
+                  ),
                 ),
-                SizedBox(
-                  height: 40,
-                ),
-                GestureDetector(
-                  onTap: () {
-                    pickStartDateAndTime();
-                  },
-                  child: Row(
-                    children: const [
-                      Icon(Icons.edit_calendar),
-                      Spacer(),
-                      Text("Select Start Date and Time"),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isExpired ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                          decoration: isExpired ? TextDecoration.lineThrough : null,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            _formatDate(item.Start),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isCurrentlyActive
+                                  ? const Color(0xFF389EB4)
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                          if (isCurrentlyActive) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'ACTIVE NOW',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF10B981),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                SizedBox(
-                  height: 40,
+                Switch(
+                  value: item.isTaskActivated,
+                  activeColor: const Color(0xFF389EB4),
+                  onChanged: (val) => _toggleSchedule(item, val),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    pickEndDateAndTime();
-                  },
+              ],
+            ),
+
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            const SizedBox(height: 12),
+
+            // Middle Row: Time range + Sound Mode Pill
+            Row(
+              children: [
+                Expanded(
                   child: Row(
-                    children: const [
-                      Icon(Icons.edit_calendar),
-                      Spacer(),
-                      Text("Select End Date and Time"),
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 15, color: Color(0xFF64748B)),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${_formatTime(item.Start)}  →  ${_formatTime(item.End)}',
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
                     ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: item.isSilentOrVibration
+                        ? const Color(0xFFF59E0B).withOpacity(0.12)
+                        : const Color(0xFF389EB4).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    item.isSilentOrVibration ? 'Vibrate' : 'Silent',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: item.isSilentOrVibration
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF389EB4),
+                    ),
                   ),
                 ),
               ],
-            )),
-            actions: [
-              TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: Text("Cancel",
-                      style: TextStyle(color: AppColors.kPrimary))),
-              TextButton(
-                  onPressed: () {
-                    scheduleModel.name = nameController.text.toString();
-                    scheduleModel.Start = DateTime(
-                        startDateTime.year,
-                        startDateTime.month,
-                        startDateTime.day,
-                        startDateTime.hour,
-                        startDateTime.minute);
-                    // "${startDateTime.hour}:${startDateTime.minute}  ${startDateTime.day.toString()}/${startDateTime.month.toString()}/${startDateTime.year.toString()}";
-                    scheduleModel.End = DateTime(
-                      endDateTime.year,
-                      endDateTime.month,
-                      endDateTime.day,
-                      endDateTime.hour,
-                      endDateTime.minute,
-                    );
-                    // "${endDateTime.hour}:${endDateTime.minute}  ${endDateTime.day.toString()}/${endDateTime.month.toString()}/${endDateTime.year.toString()}";
-                    scheduleModel.isSilentOrVibration = isSilentOrVibration;
-                    scheduleModel.save();
+            ),
 
-                    if (scheduleModel.isTaskActivated == true &&
-                        scheduleModel.isSilentOrVibration == false) {
-                      AndroidAlarmManager.oneShotAt(
-                          scheduleModel.Start, AlarmId, setSilentMode);
-                      print("at Silent mode");
-                    } else if (scheduleModel.isTaskActivated == true &&
-                        scheduleModel.isSilentOrVibration == true) {
-                      AndroidAlarmManager.oneShotAt(
-                          scheduleModel.Start, AlarmId, setVibrateMode);
-                      print("at vibration mode");
-                    }
-                    if (scheduleModel.isTaskActivated == false) {
-                      AndroidAlarmManager.oneShot(
-                          Duration(seconds: 0), AlarmId, setNormalMode);
-                    }
-                    print("before  normal mode");
-                    // if(data[index].isTaskActivated== true && now == data[index].End ){
-                    AndroidAlarmManager.oneShotAt(
-                        scheduleModel.End, AlarmId2, setNormalMode);
-                    // AndroidAlarmManager.cancel(AlarmId);
-                    // }
-                    print("after normal mode");
+            const SizedBox(height: 12),
 
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    "Ok",
-                    style: TextStyle(color: AppColors.kPrimary),
-                  )),
-            ],
-          );
-        });
-  }
-
-  Future<DateTime?> pickStartDate() => showDatePicker(
-        context: context,
-        initialDate: startDateTime,
-        firstDate: DateTime(1900),
-        lastDate: DateTime(2100),
-      );
-
-  Future<TimeOfDay?> pickStartTime() => showTimePicker(
-      context: context,
-      initialTime:
-          TimeOfDay(hour: startDateTime.hour, minute: startDateTime.minute));
-
-  Future<void> pickStartDateAndTime() async {
-    DateTime? date = await pickStartDate();
-    if (date == null) return;
-
-    TimeOfDay? time = await pickStartTime();
-    if (time == null) return;
-
-    var datetime =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    setState(() {
-      startDateTime = datetime;
-    });
-  }
-
-  // ENd time and date Code
-
-  Future<DateTime?> pickEndDate() => showDatePicker(
-      context: context,
-      initialDate: endDateTime,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100));
-
-  Future<TimeOfDay?> pickEndTime() => showTimePicker(
-      context: context,
-      initialTime:
-          TimeOfDay(hour: endDateTime.hour, minute: endDateTime.minute));
-
-  Future<void> pickEndDateAndTime() async {
-    DateTime? date = await pickEndDate();
-    if (date == null) return;
-
-    TimeOfDay? time = await pickEndTime();
-    if (time == null) return;
-
-    var datetime =
-        DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    setState(() {
-      endDateTime = datetime;
-    });
-  }
-
-  Future<void> openDoNotDisturbSettings() async {
-    await PermissionHandler.openDoNotDisturbSetting();
-  }
-
-  @pragma('vm:entry-point')
-  static Future<void> setSilentMode() async {
-    print("Silent method Called");
-    try {
-      await SoundMode.setSoundMode(RingerModeStatus.silent);
-    } on PlatformException {
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 3,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-      print('Do Not Disturb access permissions required!');
-    }
-  }
-
-  @pragma('vm:entry-point')
-  static Future<void> setNormalMode() async {
-    print("normal mode called");
-    try {
-      await SoundMode.setSoundMode(RingerModeStatus.normal);
-    } on PlatformException {
-      print('Do Not Disturb access permissions required!');
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 3,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-    }
-  }
-
-  @pragma('vm:entry-point')
-  static Future<void> setVibrateMode() async {
-    print("vibration mode called");
-    try {
-      await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-    } on PlatformException {
-      print('Do Not Disturb access permissions required!');
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 3,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-    }
-  }
-
-  Widget BuildSheet() {
-    final countProvider = Provider.of<CountProvider>(context, listen: false);
-
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          //padding: EdgeInsets.only(left: 5, right: 5, top: 32),
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+            // Bottom Action Row: Edit & Delete Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      InkWell(
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(context).push(MaterialPageRoute(
-                              builder: (context) => CreateSchedule()));
-                        },
-                        child: Container(
-                          // padding: EdgeInsets.all(10),
-                          // ignore: sort_child_properties_last
-                          child: Center(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.calendar_month_outlined,
-                                    color: AppColors.kPrimary,
-                                    size: 52,
-                                  ),
-                                  SizedBox(
-                                    height: MediaQuery.of(context).size.height /
-                                        100,
-                                  ),
-                                  Text(
-                                    "Calendar",
-                                    style: TextStyle(
-                                        fontSize: 15,
-                                        color: AppColors.kPrimary,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 50,
-                                  ),
-                                  Text(
-                                    "Choose Date and Time for one time",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.kPrimary,
-                                      // fontWeight: FontWeight.bold
-                                    ),
-                                  )
-                                ],
-                              ),
-                            ),
+                // Edit Button
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _openCreateOrEditScreen(item),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.edit_outlined, size: 16, color: Color(0xFF389EB4)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Edit',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF389EB4),
                           ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(29),
-                            color: AppColors.kSecondary,
-
-                            // border: Border.all(color: Colors.grey)
-                          ),
-
-                          height: MediaQuery.of(context).size.height / 5,
-                          width: MediaQuery.of(context).size.width / 1.5,
                         ),
-                      ),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width / 40,
-                      ),
-                      // InkWell(
-                      //   onTap: () {
-                      //     Navigator.of(context).pop();
-                      //     Navigator.of(context).push(MaterialPageRoute(
-                      //         builder: (context) => CreateDaily()));
-                      //   },
-                      //   child: Container(
-                      //     //padding: EdgeInsets.all(29),
-                      //     child: Center(
-                      //       child: SingleChildScrollView(
-                      //         child: Column(
-                      //           crossAxisAlignment: CrossAxisAlignment.center,
-                      //           mainAxisAlignment: MainAxisAlignment.center,
-                      //           children: [
-                      //             Icon(
-                      //               Icons.av_timer,
-                      //               color: AppColors.kBlack,
-                      //               size: 52,
-                      //             ),
-                      //             SizedBox(
-                      //               height: MediaQuery.of(context).size.height /
-                      //                   100,
-                      //             ),
-                      //             Text(
-                      //               "Set Daily",
-                      //               style: TextStyle(
-                      //                   fontSize: 15,
-                      //                   color: AppColors.kBlack,
-                      //                   fontWeight: FontWeight.bold),
-                      //             )
-                      //           ],
-                      //         ),
-                      //       ),
-                      //     ),
-                      //     decoration: BoxDecoration(
-                      //       color: AppColors.kcontainer,
-                      //       // border: Border.all(color: Colors.grey)
-                      //       borderRadius: BorderRadius.circular(29),
-                      //     ),
-
-                      //     height: MediaQuery.of(context).size.height / 5,
-                      //     width: MediaQuery.of(context).size.width / 2.5,
-                      //   ),
-                      // )
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                SizedBox(
-                  height: 1,
-                ),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      InkWell(
-                        onTap: () {},
-                        child: Container(
-                          //padding: EdgeInsets.all(15),
-                          // ignore: sort_child_properties_last
-                          child: Center(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: <Widget>[
-                                      Consumer<CountProvider>(
-                                        builder: (BuildContext context, value,
-                                            Widget? child) {
-                                          return Text(
-                                            "${countProvider.count.toString()}m",
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .headlineMedium,
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(
-                                    height:
-                                        MediaQuery.of(context).size.height / 15,
-                                  ),
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                                    child: Row(
-                                      children: [
-                                        IconButton(
-                                            onPressed: () =>
-                                                countProvider.decremenCounter(),
-                                            icon: Icon(
-                                              Icons.remove_circle,
-                                              color: AppColors.kPrimary,
-                                              size: 52,
-                                            )),
-                                        Spacer(),
-                                        IconButton(
-                                            onPressed: () => countProvider
-                                                .incrementCounter(),
-                                            icon: Icon(
-                                              Icons.add_circle,
-                                              color: AppColors.kPrimary,
-                                              size: 52,
-                                            )),
-                                      ],
-                                    ),
-                                  )
-                                ],
-                              ),
-                            ),
+                const SizedBox(width: 12),
+                // Delete Button
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _deleteSchedule(item),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFEF4444)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFEF4444),
                           ),
-                          decoration: BoxDecoration(
-                              color: AppColors.kSecondary,
-                              // border: Border.all(color: Colors.grey)
-                              borderRadius: BorderRadius.circular(29),
-                              border: Border.all(
-                                  color: Color.fromARGB(255, 255, 255, 255))),
-                          height: MediaQuery.of(context).size.height / 4.5,
-                          width: MediaQuery.of(context).size.width / 2,
                         ),
-                      ),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width / 40,
-                        height: MediaQuery.of(context).size.height / 4,
-                      ),
-                      // Container
-                      InkWell(
-                        onTap: () {
-                          DateTime endTimeAddittion = DateTime.now();
-                          var data = ScheduleModel(
-                              name: "Quick ${countProvider.count.toString()}m",
-                              Start: DateTime.now(),
-                              End: DateTime(
-                                  endTimeAddittion.year,
-                                  endTimeAddittion.month,
-                                  endTimeAddittion.day,
-                                  endTimeAddittion.hour,
-                                  endTimeAddittion.minute +
-                                      countProvider.count),
-                              isSilentOrVibration: isSilentOrVibration,
-                              isTaskActivated: true,
-                              quickTime: countProvider.count);
-                          final box = Boxes.getData();
-                          box.add(data);
-                          countProvider.updateHasData(box.isNotEmpty);
-
-                          AndroidAlarmManager.oneShotAt(
-                              data.Start, AlarmId, setSilentMode);
-                          print("at Silent mode");
-                          print("before  normal mode");
-                          AndroidAlarmManager.oneShotAt(
-                              data.End, AlarmId2, setNormalMode);
-                          print("after normal mode");
-                          Navigator.of(context).pop();
-                        },
-                        child: Container(
-                          //padding: EdgeInsets.all(29),
-                          child: Center(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.volume_off,
-                                    color: AppColors.kPrimary,
-                                    size: 52,
-                                  ),
-                                  SizedBox(
-                                    height: 10,
-                                    // height: MediaQuery.of(context).size.height /100,
-                                  ),
-                                  Consumer<CountProvider>(
-                                    builder: (BuildContext context, value,
-                                        Widget? child) {
-                                      return Text(
-                                        "Silent for [${countProvider.count.toString()} mins]",
-                                        style: TextStyle(
-                                            fontSize: 15,
-                                            color: AppColors.kPrimary,
-                                            fontWeight: FontWeight.bold),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.kSecondary,
-                            // border: Border.all(color: Colors.grey)
-                            borderRadius: BorderRadius.circular(29),
-                          ),
-                          height: MediaQuery.of(context).size.height / 5,
-                          width: MediaQuery.of(context).size.width / 3,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                SizedBox(),
-              ]),
+              ],
+            ),
+          ],
         ),
       ),
     );

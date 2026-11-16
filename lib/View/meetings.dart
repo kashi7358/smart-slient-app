@@ -1,3 +1,4 @@
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -7,11 +8,12 @@ import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_daily.dart';
+import 'package:smart_silent/View/tab_bar.dart';
 import 'package:smart_silent/models/repeated_model.dart';
+import 'package:smart_silent/models/schedule_model.dart';
 import 'package:sound_mode/permission_handler.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
 class Repeated extends StatefulWidget {
   const Repeated({super.key});
@@ -21,11 +23,6 @@ class Repeated extends StatefulWidget {
 }
 
 class _RepeatedState extends State<Repeated> {
-  final nameController = TextEditingController();
-  DateTime startDateTime = DateTime.now();
-  DateTime endDateTime = DateTime.now().add(const Duration(hours: 1));
-  bool isSilentOrVibration = false;
-
   late BannerAd _bannerAd;
   bool isAdLoaded = false;
 
@@ -53,13 +50,29 @@ class _RepeatedState extends State<Repeated> {
 
   @override
   void dispose() {
-    nameController.dispose();
     try {
       if (isAdLoaded) {
         _bannerAd.dispose();
       }
     } catch (_) {}
     super.dispose();
+  }
+
+  String _formatTime12h(DateTime dt) {
+    final int h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final String m = dt.minute.toString().padLeft(2, '0');
+    final String period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $period';
+  }
+
+  Future<void> _openEditSchedule(RepeatedModel item) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateDaily(existingSchedule: item),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   @override
@@ -95,11 +108,13 @@ class _RepeatedState extends State<Repeated> {
 
                 return ListView.builder(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 10, bottom: 180),
+                  padding: const EdgeInsets.only(top: 10, bottom: 205),
                   itemCount: data.length,
                   itemBuilder: (context, index) {
                     final item = data[index];
-                    final days = item.dayInWeek ?? [0, 1, 2, 3, 4, 5, 6];
+                    final days = (item.dayInWeek != null && item.dayInWeek!.isNotEmpty)
+                        ? item.dayInWeek!
+                        : [0, 1, 2, 3, 4, 5, 6];
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
@@ -122,11 +137,17 @@ class _RepeatedState extends State<Repeated> {
                           ),
                         ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => _openEditSchedule(item),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                             // Top Row: Icon + Title + Status Badge + Switch + Popup Menu
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
@@ -211,7 +232,7 @@ class _RepeatedState extends State<Repeated> {
                                     if (val == 1) {
                                       _deleteSchedule(item);
                                     } else if (val == 2) {
-                                      _showEditDialog(item);
+                                      _openEditSchedule(item);
                                     }
                                   },
                                   itemBuilder: (context) => [
@@ -254,8 +275,11 @@ class _RepeatedState extends State<Repeated> {
                               child: Divider(height: 1, color: Color(0xFFF1F5F9)),
                             ),
 
-                            // Middle Row: Time pill + Vibrate/Silent badge
-                            Row(
+                            // Middle Row: Time pill + Vibrate/Silent badge (Wrap prevents any screen width overflow)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -269,7 +293,7 @@ class _RepeatedState extends State<Repeated> {
                                       const Icon(Icons.access_time_rounded, size: 13, color: Color(0xFF389EB4)),
                                       const SizedBox(width: 5),
                                       Text(
-                                        "${item.Start.hour.toString().padLeft(2, '0')}:${item.Start.minute.toString().padLeft(2, '0')} - ${item.End.hour.toString().padLeft(2, '0')}:${item.End.minute.toString().padLeft(2, '0')}",
+                                        "${_formatTime12h(item.Start)} - ${_formatTime12h(item.End)}",
                                         style: const TextStyle(
                                           color: Color(0xFF334155),
                                           fontWeight: FontWeight.w700,
@@ -280,7 +304,6 @@ class _RepeatedState extends State<Repeated> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
@@ -314,13 +337,14 @@ class _RepeatedState extends State<Repeated> {
 
                             const SizedBox(height: 8),
 
-                            // Bottom Row: Days pills aligned nicely across
-                            Row(
+                            // Bottom Row: Days pills wrapped nicely to prevent overflow
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
                               children: List.generate(7, (dayIdx) {
                                 final dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
                                 final isSelected = days.contains(dayIdx);
                                 return Container(
-                                  margin: const EdgeInsets.only(right: 6),
                                   width: 24,
                                   height: 24,
                                   decoration: BoxDecoration(
@@ -341,6 +365,8 @@ class _RepeatedState extends State<Repeated> {
                               }),
                             ),
                           ],
+                        ),
+                      ),
                         ),
                       ),
                     );
@@ -432,116 +458,106 @@ class _RepeatedState extends State<Repeated> {
   }
 
   Widget _buildBottomQuickDailySilentWithFab(CountProvider provider) {
-    final double bannerHeight = isAdLoaded ? _bannerAd.size.height.toDouble() : 0.0;
-    final double sheetHeight = 94.0 + (isAdLoaded ? bannerHeight + 10.0 : 0.0);
-    final double totalHeight = sheetHeight + 25.0;
-
-    return SizedBox(
-      height: totalHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.bottomCenter,
-        children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x18000000),
-                    blurRadius: 18,
-                    offset: Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, bottom: 10),
-                    child: Text(
-                      'Quick Daily Silent',
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Row(
-                      children: [
-                        _buildQuickDailyPill(label: '5 Min', minutes: 5, provider: provider),
-                        _buildQuickDailyPill(label: '10 Min', minutes: 10, provider: provider),
-                        _buildQuickDailyPill(label: '30 Min', minutes: 30, provider: provider),
-                        _buildQuickDailyPill(label: '1 Hour', minutes: 60, provider: provider),
-                        _buildQuickDailyPill(label: '2 Hour', minutes: 120, provider: provider),
-                        _buildQuickDailyPill(label: '3 Hour', minutes: 180, provider: provider),
-                      ],
-                    ),
-                  ),
-                  if (isAdLoaded) ...[
-                    const SizedBox(height: 10),
-                    Center(
-                      child: SizedBox(
-                        height: _bannerAd.size.height.toDouble(),
-                        width: _bannerAd.size.width.toDouble(),
-                        child: AdWidget(ad: _bannerAd),
-                      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Raised FAB (+) positioned cleanly above Quick Daily Silent sheet
+        Padding(
+          padding: const EdgeInsets.only(right: 22, bottom: 14),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CreateDaily()),
+                );
+              },
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF389EB4),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF389EB4).withOpacity(0.42),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
                     ),
                   ],
-                ],
-              ),
-            ),
-          ),
-
-          // Raised FAB (+) aligned comfortably right above Quick Daily card (matching Home screen)
-          Positioned(
-            bottom: sheetHeight - 25.0,
-            right: 22,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const CreateDaily()),
-                  );
-                },
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF389EB4),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF389EB4).withOpacity(0.42),
-                        blurRadius: 12,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.add, color: Colors.white, size: 28),
-                  ),
+                ),
+                child: const Center(
+                  child: Icon(Icons.add, color: Colors.white, size: 28),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x18000000),
+                blurRadius: 18,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 10),
+                  child: Text(
+                    'Quick Daily Silent',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      _buildQuickDailyPill(label: '5 Min', minutes: 5, provider: provider),
+                      _buildQuickDailyPill(label: '10 Min', minutes: 10, provider: provider),
+                      _buildQuickDailyPill(label: '30 Min', minutes: 30, provider: provider),
+                      _buildQuickDailyPill(label: '1 Hour', minutes: 60, provider: provider),
+                      _buildQuickDailyPill(label: '2 Hour', minutes: 120, provider: provider),
+                      _buildQuickDailyPill(label: '3 Hour', minutes: 180, provider: provider),
+                    ],
+                  ),
+                ),
+                if (isAdLoaded) ...[
+                  const SizedBox(height: 10),
+                  Center(
+                    child: SizedBox(
+                      height: _bannerAd.size.height.toDouble(),
+                      width: _bannerAd.size.width.toDouble(),
+                      child: AdWidget(ad: _bannerAd),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -584,34 +600,52 @@ class _RepeatedState extends State<Repeated> {
   void _activateQuickDailySilent(int minutes, String label, CountProvider provider) async {
     final startTime = DateTime.now();
     final endTime = startTime.add(Duration(minutes: minutes));
+    final int alarmIdEnd = ((startTime.millisecondsSinceEpoch ~/ 1000) % 100000) + 1;
 
-    final data = RepeatedModel(
-      name: 'Quick $label daily',
+    try {
+      await SoundControlHelper.enterSilentWindow(
+        sourceId: 'quick_meeting_silent',
+        endTime: endTime,
+        vibrate: false,
+        endAlarmId: alarmIdEnd,
+      );
+    } catch (_) {}
+
+    try {
+      await AndroidAlarmManager.oneShotAt(
+        endTime,
+        alarmIdEnd,
+        restoreNormalModeCallback,
+        exact: true,
+        wakeup: true,
+      );
+    } catch (_) {
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          endTime,
+          alarmIdEnd,
+          restoreNormalModeCallback,
+          exact: false,
+          wakeup: true,
+        );
+      } catch (_) {}
+    }
+
+    final quickSchedule = ScheduleModel(
+      name: 'Quick Silent ($label)',
       Start: startTime,
       End: endTime,
       isSilentOrVibration: false,
       isTaskActivated: true,
       quickTime: minutes,
-      dayInWeek: [0, 1, 2, 3, 4, 5, 6],
     );
 
-    final box = Boxes.getDataforDaily();
-    await box.add(data);
+    final box = Boxes.getData();
+    await box.add(quickSchedule);
     provider.updateHasData(box.isNotEmpty);
 
-    await MeetingAlarmHelper.syncAllMeetings();
-
-    // Immediately trigger silent mode
-    try {
-      await SoundMode.setSoundMode(RingerModeStatus.silent);
-    } catch (_) {
-      try {
-        await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-      } catch (_) {}
-    }
-
     Fluttertoast.showToast(
-      msg: 'Quick $label Daily Silent activated!',
+      msg: 'Phone silenced for $label!',
       toastLength: Toast.LENGTH_SHORT,
       backgroundColor: const Color(0xFF389EB4),
       textColor: Colors.white,
@@ -622,102 +656,5 @@ class _RepeatedState extends State<Repeated> {
     await item.delete();
     await MeetingAlarmHelper.syncAllMeetings();
     Fluttertoast.showToast(msg: "Schedule deleted");
-  }
-
-  void _showEditDialog(RepeatedModel item) {
-    nameController.text = item.name;
-    startDateTime = item.Start;
-    endDateTime = item.End;
-    isSilentOrVibration = item.isSilentOrVibration;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text("Edit Schedule", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        labelText: "Schedule Title",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text("Start Time"),
-                      trailing: Text(
-                        "${startDateTime.hour.toString().padLeft(2, '0')}:${startDateTime.minute.toString().padLeft(2, '0')}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF389EB4)),
-                      ),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay(hour: startDateTime.hour, minute: startDateTime.minute),
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            startDateTime = DateTime(startDateTime.year, startDateTime.month, startDateTime.day, picked.hour, picked.minute);
-                          });
-                        }
-                      },
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text("End Time"),
-                      trailing: Text(
-                        "${endDateTime.hour.toString().padLeft(2, '0')}:${endDateTime.minute.toString().padLeft(2, '0')}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF389EB4)),
-                      ),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay(hour: endDateTime.hour, minute: endDateTime.minute),
-                        );
-                        if (picked != null) {
-                          setDialogState(() {
-                            endDateTime = DateTime(endDateTime.year, endDateTime.month, endDateTime.day, picked.hour, picked.minute);
-                          });
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel", style: TextStyle(color: Color(0xFF64748B))),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF389EB4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () async {
-                    item.name = nameController.text.trim().isEmpty ? "Meeting" : nameController.text.trim();
-                    item.Start = startDateTime;
-                    item.End = endDateTime;
-                    item.isSilentOrVibration = isSilentOrVibration;
-                    await item.save();
-                    await MeetingAlarmHelper.syncAllMeetings();
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Save", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 }

@@ -13,7 +13,9 @@ import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/Utils/hijri_helper.dart';
+import 'package:smart_silent/Utils/nearby_masjid_service.dart';
 import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_daily.dart';
 import 'package:smart_silent/View/create_nemaz.dart';
 import 'package:smart_silent/View/create_schedule.dart';
@@ -25,61 +27,22 @@ import 'package:smart_silent/View/nemaz.dart';
 import 'package:smart_silent/View/setings.dart';
 import 'package:smart_silent/models/schedule_model.dart';
 import 'package:sound_mode/permission_handler.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 import 'package:store_redirect/store_redirect.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // Public top-level callbacks for AndroidAlarmManager
 @pragma('vm:entry-point')
 void activateDeviceSilentCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
   try {
-    await SoundMode.setSoundMode(RingerModeStatus.silent);
+    await SoundControlHelper.applySilentOrVibrate(vibrate: false);
   } catch (_) {}
 }
 
 @pragma('vm:entry-point')
 void restoreNormalModeCallback() async {
-  try {
-    await SoundMode.setSoundMode(RingerModeStatus.normal);
-  } catch (_) {}
-}
-
-// Model for Nearby Mosque
-class MosqueItem {
-  final String name;
-  final String address;
-  final String distanceText;
-  final double? lat;
-  final double? lng;
-  final String imageUrl;
-
-  const MosqueItem({
-    required this.name,
-    required this.address,
-    required this.distanceText,
-    this.lat,
-    this.lng,
-    required this.imageUrl,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'address': address,
-        'distanceText': distanceText,
-        'lat': lat,
-        'lng': lng,
-        'imageUrl': imageUrl,
-      };
-
-  factory MosqueItem.fromJson(Map<String, dynamic> json) => MosqueItem(
-        name: json['name'] ?? 'Mosque',
-        address: json['address'] ?? '',
-        distanceText: json['distanceText'] ?? 'Nearby (< 1 km)',
-        lat: json['lat'] != null ? (json['lat'] as num).toDouble() : null,
-        lng: json['lng'] != null ? (json['lng'] as num).toDouble() : null,
-        imageUrl: json['imageUrl'] ?? 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=400&q=80',
-      );
+  WidgetsFlutterBinding.ensureInitialized();
+  await SoundControlHelper.leaveSilentWindow(sourceId: 'quick_silent');
 }
 
 class TabBarDemo extends StatefulWidget {
@@ -89,16 +52,19 @@ class TabBarDemo extends StatefulWidget {
   State<TabBarDemo> createState() => _TabBarDemoState();
 }
 
-class _TabBarDemoState extends State<TabBarDemo> {
+class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedScheduleTabIndex = 0;
   int _activePrayerDotIndex = 0;
   late final PageController _prayerPageController;
   Timer? _prayerTimer;
 
-  bool _isOnline = false;
   bool _isLoadingMosques = false;
-  String _currentLocationTag = '';
+  int _mosqueFetchGeneration = 0;
+  String _locationStatusMessage = '';
+  String _locationErrorType = '';
+  double? _lastUserLat;
+  double? _lastUserLon;
   List<MosqueItem> _mosques = [];
 
   // Prayer times data for banner
@@ -132,23 +98,14 @@ class _TabBarDemoState extends State<TabBarDemo> {
     Color(0xFF1C2541),
   ];
 
-  // High-Resolution Verified Mosque Photographs for Nearby Masjids
-  static const List<String> _mosqueImagePool = [
-    'https://images.unsplash.com/photo-1564769625905-50e93615e769?auto=format&fit=crop&w=600&q=80', // Faisal Mosque Islamabad
-    'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&w=600&q=80', // Badshahi Mosque Lahore
-    'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=600&q=80', // Sheikh Zayed Grand Mosque Abu Dhabi
-    'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&w=600&q=80', // Sultan Ahmed Blue Mosque Istanbul
-    'https://images.unsplash.com/photo-1590076215667-875d4ef2d7ee?auto=format&fit=crop&w=600&q=80', // Al-Masjid an-Nabawi Madinah
-    'https://images.unsplash.com/photo-1512632570417-a60ddc0e86b0?auto=format&fit=crop&w=600&q=80', // Dome of the Rock / Al-Aqsa
-  ];
-
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _calculateDynamicOfflinePrayerTimes();
     _prayerPageController = PageController(initialPage: _activePrayerDotIndex);
-    _loadCachedRealMosques();
     _fetchLiveNearbyMosques();
+    SoundControlHelper.syncManualOverrideState();
     PrayerAlarmHelper.verifyAlarmsOnAppLaunch();
 
     // Dynamically update nearest prayer slider every minute
@@ -159,9 +116,24 @@ class _TabBarDemoState extends State<TabBarDemo> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _prayerTimer?.cancel();
     _prayerPageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      SoundControlHelper.syncManualOverrideState();
+      // Auto-retry when returning from Location / App Permission settings
+      if (_mosques.isEmpty &&
+          (_locationErrorType == 'location_disabled' ||
+              _locationErrorType == 'permission_denied' ||
+              _locationErrorType == 'approximate_only')) {
+        _fetchLiveNearbyMosques(forceFresh: true);
+      }
+    }
   }
 
   // Smoothly animate the PageView slider to the nearest prayer
@@ -313,176 +285,130 @@ class _TabBarDemoState extends State<TabBarDemo> {
     return bestIndex;
   }
 
-  // Transliterate Urdu / Arabic characters to clear English/Roman text
-  static String _urduToEnglish(String input) {
-    if (input.isEmpty) return input;
-    // Map common Urdu/Arabic words
-    final Map<String, String> wordMap = {
-      'جامع': 'Jamia',
-      'مسجد': 'Masjid',
-      'مدینہ': 'Madina',
-      'مکہ': 'Makkah',
-      'بلال': 'Bilal',
-      'فاروق': 'Farooq',
-      'عمر': 'Umar',
-      'عثمان': 'Usman',
-      'علی': 'Ali',
-      'ابوبکر': 'Abu Bakr',
-      'صدیق': 'Siddiq',
-      'غوثیہ': 'Ghausia',
-      'فیضان': 'Faizan',
-      'مصطفی': 'Mustafa',
-      'مدنی': 'Madani',
-      'نور': 'Noor',
-      'حرم': 'Haram',
-      'طیبہ': 'Tayyaba',
-      'قباء': 'Quba',
-      'اقصیٰ': 'Al-Aqsa',
-      'اقصی': 'Al-Aqsa',
-      'شاہی': 'Shahi',
-      'مرکزی': 'Markazi',
-      'مرکز': 'Markaz',
-      'گلی': 'Street',
-      'روڈ': 'Road',
-      'محلہ': 'Mohallah',
-      'چوک': 'Chowk',
-      'بلاگ': 'Block',
-      'بلاک': 'Block',
-      'سیکٹر': 'Sector',
-      'ٹاؤن': 'Town',
-      'شہر': 'City',
-      'بازار': 'Bazaar',
-      'کالونی': 'Colony',
-      'نمبر': 'No.',
-      'قریب': 'Near',
-    };
+  static const MethodChannel _platformChannel =
+      MethodChannel('com.kawiish.smartsilent/device_compatibility');
 
-    String result = input;
-    wordMap.forEach((urdu, eng) {
-      result = result.replaceAll(urdu, eng);
-    });
+  static const String _cacheMosquesKey = 'saved_real_nearby_mosques_v4';
+  static const String _cacheLatKey = 'saved_mosques_center_lat';
+  static const String _cacheLngKey = 'saved_mosques_center_lng';
+  static const String _cacheTimeKey = 'cached_mosques_timestamp';
+  static const String _cacheTagKey = 'cached_location_tag';
 
-    // Character mapping for remaining characters
-    final Map<String, String> charMap = {
-      'ا': 'a', 'آ': 'Aa', 'ب': 'b', 'پ': 'p', 'ت': 't', 'ٹ': 't', 'ث': 's',
-      'ج': 'j', 'چ': 'ch', 'ح': 'h', 'خ': 'kh', 'د': 'd', 'ڈ': 'd', 'ذ': 'z',
-      'ر': 'r', 'ڑ': 'r', 'ز': 'z', 'ژ': 'zh', 'س': 's', 'ش': 'sh', 'ص': 's',
-      'ض': 'z', 'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh', 'ف': 'f', 'ق': 'q',
-      'ک': 'k', 'گ': 'g', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ں': 'n', 'و': 'o',
-      'ہ': 'h', 'ۂ': 'h', 'ۃ': 'h', 'ھ': 'h', 'ء': '', 'ی': 'i', 'ے': 'e',
-      '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
-      '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
-      '،': ',', '۔': '.',
-    };
-
-    final buffer = StringBuffer();
-    for (int i = 0; i < result.length; i++) {
-      final char = result[i];
-      if (charMap.containsKey(char)) {
-        buffer.write(charMap[char]);
-      } else {
-        buffer.write(char);
-      }
-    }
-
-    String cleaned = buffer.toString()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r',\s*,+'), ',')
-        .trim();
-    // Capitalize first letters of words
-    if (cleaned.isNotEmpty) {
-      cleaned = cleaned.split(' ').map((w) {
-        if (w.isEmpty) return w;
-        return w[0].toUpperCase() + (w.length > 1 ? w.substring(1) : '');
-      }).join(' ');
-    }
-    return cleaned;
-  }
-
-  // Helper to extract a clean English street/area address from OSM Nominatim item
-  static String _extractEnglishAddress(Map<String, dynamic>? addr, String displayName, String fallbackCity) {
-    if (addr != null) {
-      // Check English variants first, then standard keys
-      final road = addr['road:en'] ?? addr['road'] ?? addr['street'] ?? '';
-      final suburb = addr['suburb:en'] ?? addr['suburb'] ?? addr['neighbourhood:en'] ?? addr['neighbourhood'] ?? addr['residential'] ?? '';
-      final city = addr['city:en'] ?? addr['city'] ?? addr['town:en'] ?? addr['town'] ?? addr['county'] ?? fallbackCity;
-
-      final parts = <String>[];
-      if (road.toString().trim().isNotEmpty) parts.add(_urduToEnglish(road.toString().trim()));
-      if (suburb.toString().trim().isNotEmpty) parts.add(_urduToEnglish(suburb.toString().trim()));
-      if (city.toString().trim().isNotEmpty) parts.add(_urduToEnglish(city.toString().trim()));
-
-      if (parts.isNotEmpty) {
-        return parts.toSet().take(2).join(', ');
-      }
-    }
-
-    if (displayName.isNotEmpty) {
-      final segments = displayName.split(',').map((s) => _urduToEnglish(s.trim())).where((s) => s.isNotEmpty).toList();
-      if (segments.length > 1) {
-        return '${segments[1]}, ${segments.length > 2 ? segments[2] : segments[0]}';
-      }
-      return segments.first;
-    }
-
-    return fallbackCity.isNotEmpty ? _urduToEnglish(fallbackCity) : 'Nearby';
-  }
-
-  // Load real cached nearby mosques from local storage (available offline)
-  Future<void> _loadCachedRealMosques() async {
+  /// Opens Google Maps searching for nearby masjids around current coordinates.
+  Future<void> _openGoogleMapsMasjidSearch() async {
+    final Uri uri = (_lastUserLat != null && _lastUserLon != null)
+        ? Uri.parse('geo:$_lastUserLat,$_lastUserLon?q=masjid')
+        : Uri.parse('geo:0,0?q=masjid+near+me');
+    final Uri webUri = (_lastUserLat != null && _lastUserLon != null)
+        ? Uri.parse(
+            'https://www.google.com/maps/search/masjid/@$_lastUserLat,$_lastUserLon,16z')
+        : Uri.parse('https://www.google.com/maps/search/?api=1&query=masjid');
+    bool launched = false;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cached = prefs.getString('saved_real_nearby_mosques');
-      final cachedTag = prefs.getString('cached_location_tag');
-      if (cached != null && cached.isNotEmpty) {
-        final List list = jsonDecode(cached);
-        final cachedMosques = list.map((e) {
-          final item = MosqueItem.fromJson(e);
-          final int rawDist = int.tryParse(item.distanceText.replaceAll(RegExp(r'[^0-9]'), '')) ?? 300;
-          final int clamped = (rawDist <= 500 && rawDist >= 50 && !item.distanceText.contains('km'))
-              ? rawDist
-              : (90 + (list.indexOf(e) * 65)).clamp(70, 480);
-          return MosqueItem(
-            name: _urduToEnglish(item.name),
-            address: _urduToEnglish(item.address),
-            distanceText: '$clamped m away',
-            lat: item.lat,
-            lng: item.lng,
-            imageUrl: item.imageUrl,
-          );
-        }).toList();
-        if (cachedMosques.isNotEmpty && mounted) {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+    if (!launched) {
+      try {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+  }
+
+  /// Handles tap on the empty/error Nearby Masjids card based on the failure reason.
+  Future<void> _handleMosqueEmptyCardTap() async {
+    if (_locationErrorType == 'location_disabled') {
+      try {
+        await _platformChannel.invokeMethod('openLocationSettings');
+      } catch (_) {}
+      return;
+    }
+    if (_locationErrorType == 'permission_denied' ||
+        _locationErrorType == 'approximate_only') {
+      try {
+        final dynamic granted = await _platformChannel.invokeMethod(
+          'requestLocationPermission',
+          {'upgradePrecise': _locationErrorType == 'approximate_only'},
+        );
+        if (granted != true) {
+          await _platformChannel.invokeMethod('openAppSettings');
+          return;
+        }
+      } catch (_) {}
+    }
+    await _fetchLiveNearbyMosques(forceFresh: true);
+  }
+
+  /// Fetch 100% REAL nearby mosques using verified device GPS/Fused coordinates
+  /// and smart local tiering (650m -> 1km -> 1.5km -> 2.5km max) across Overpass,
+  /// Komoot Photon, and Nominatim, showing cached/early results immediately.
+  Future<void> _fetchLiveNearbyMosques({bool forceFresh = false}) async {
+    final int generation = ++_mosqueFetchGeneration;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (generation != _mosqueFetchGeneration || !mounted) return;
+
+    // 0. Show fresh local cache immediately BEFORE waiting for GPS when not forcing refresh
+    if (!forceFresh && _mosques.isEmpty) {
+      final int? cachedTs = prefs.getInt(_cacheTimeKey);
+      final double? cLat = prefs.getDouble(_cacheLatKey);
+      final double? cLng = prefs.getDouble(_cacheLngKey);
+      if (cachedTs != null &&
+          cLat != null &&
+          cLng != null &&
+          DateTime.now()
+                  .difference(DateTime.fromMillisecondsSinceEpoch(cachedTs)) <=
+              NearbyMasjidService.maxCacheAge) {
+        final quickCache = NearbyMasjidService.decodeAndValidateCachedMosques(
+          rawJson: prefs.getString(_cacheMosquesKey),
+          currentLat: cLat,
+          currentLng: cLng,
+        );
+        if (quickCache.isNotEmpty) {
           setState(() {
-            _mosques = cachedMosques;
-            _currentLocationTag = cachedTag != null ? _urduToEnglish(cachedTag) : '';
+            _mosques = quickCache;
+            _lastUserLat = cLat;
+            _lastUserLon = cLng;
             _isLoadingMosques = false;
+            _locationStatusMessage = '';
+            _locationErrorType = '';
           });
         }
       }
-    } catch (_) {}
-  }
+    }
 
-  // Fetch 100% REAL nearby mosques based on mobile device's actual location
-  Future<void> _fetchLiveNearbyMosques() async {
-    if (_isLoadingMosques && _mosques.isNotEmpty) return;
-    if (_mosques.isEmpty) {
-      setState(() => _isLoadingMosques = true);
+    if (mounted && (_mosques.isEmpty || forceFresh)) {
+      setState(() {
+        _isLoadingMosques = true;
+        _locationStatusMessage = '';
+        _locationErrorType = '';
+      });
     }
 
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 6);
-    final images = _mosqueImagePool;
+    client.connectionTimeout = const Duration(seconds: 5);
 
     try {
+      // 1. Ensure runtime location permission only if missing
+      try {
+        final dynamic hasPerm =
+            await _platformChannel.invokeMethod('hasLocationPermission');
+        if (hasPerm != true) {
+          await _platformChannel.invokeMethod('requestLocationPermission');
+        }
+      } catch (_) {}
+
+      // 2. Get verified GPS/Fused coordinates from Android
       double? userLat;
       double? userLon;
-      String locationName = '';
+      String? locationError;
 
-      // 1. Get mobile location: Try precise device hardware GPS via platform channel first, fallback to IP Geolocation
       try {
-        const platformChannel = MethodChannel('com.kawiish.smartsilent/device_compatibility');
-        final dynamic raw = await platformChannel.invokeMethod('getDeviceLocation');
+        final dynamic raw = await _platformChannel.invokeMethod(
+          'getDeviceLocation',
+          {'forceFresh': forceFresh},
+        );
         if (raw is Map) {
+          locationError = raw['error']?.toString();
           final lat = (raw['latitude'] as num?)?.toDouble();
           final lng = (raw['longitude'] as num?)?.toDouble();
           if (lat != null && lng != null) {
@@ -490,182 +416,328 @@ class _TabBarDemoState extends State<TabBarDemo> {
             userLon = lng;
           }
         }
-      } catch (_) {}
-
-      // Fallback 1: ipapi.co (HTTPS)
-      if (userLat == null || userLon == null) {
-        try {
-          final req = await client.getUrl(Uri.parse('https://ipapi.co/json/'));
-          req.headers.set('User-Agent', 'SmartSilentApp/1.0');
-          final resp = await req.close();
-          if (resp.statusCode == 200) {
-            final body = await resp.transform(utf8.decoder).join();
-            final data = jsonDecode(body);
-            userLat = (data['latitude'] as num?)?.toDouble();
-            userLon = (data['longitude'] as num?)?.toDouble();
-            locationName = (data['city'] ?? data['region'] ?? '').toString().trim();
-          }
-        } catch (_) {}
+      } catch (_) {
+        locationError = 'timeout';
       }
 
-      // Fallback 1: ipwho.is (HTTPS)
-      if (userLat == null || userLon == null) {
-        try {
-          final req = await client.getUrl(Uri.parse('https://ipwho.is/'));
-          final resp = await req.close();
-          if (resp.statusCode == 200) {
-            final body = await resp.transform(utf8.decoder).join();
-            final data = jsonDecode(body);
-            if (data['success'] == true) {
-              userLat = (data['latitude'] as num?)?.toDouble();
-              userLon = (data['longitude'] as num?)?.toDouble();
-              locationName = (data['city'] ?? data['region'] ?? '').toString().trim();
-            }
-          }
-        } catch (_) {}
-      }
+      if (generation != _mosqueFetchGeneration || !mounted) return;
 
-      // Fallback 2: ip-api.com (HTTP)
+      // Never fall back to IP geolocation or stale mosques from another area
       if (userLat == null || userLon == null) {
-        try {
-          final req = await client.getUrl(Uri.parse('http://ip-api.com/json?fields=status,city,district,lat,lon'));
-          final resp = await req.close();
-          if (resp.statusCode == 200) {
-            final body = await resp.transform(utf8.decoder).join();
-            final data = jsonDecode(body);
-            if (data['status'] == 'success') {
-              userLat = (data['lat'] as num?)?.toDouble();
-              userLon = (data['lon'] as num?)?.toDouble();
-              final district = (data['district'] ?? '').toString().trim();
-              final city = (data['city'] ?? '').toString().trim();
-              locationName = district.isNotEmpty ? district : city;
-            }
-          }
-        } catch (_) {}
-      }
-
-      if (userLat == null || userLon == null) {
-        if (_mosques.isEmpty) {
-          await _loadCachedRealMosques();
+        final String errType = locationError ?? 'timeout';
+        String msg;
+        switch (errType) {
+          case 'permission_denied':
+            msg = 'Allow location permission & tap here to see masjids in your area.';
+            break;
+          case 'approximate_only':
+            msg = 'Enable Precise Location (not Approximate) & tap here for accurate masjids.';
+            break;
+          case 'location_disabled':
+            msg = 'Device GPS/Location is turned off. Tap here to enable Location.';
+            break;
+          case 'low_accuracy':
+            msg = 'GPS signal is weak indoors. Move near a window & tap to retry.';
+            break;
+          default:
+            msg = 'Could not get a fresh GPS fix. Turn on GPS & tap to retry.';
         }
-        if (mounted) setState(() => _isLoadingMosques = false);
+        if (mounted) {
+          setState(() {
+            _mosques = [];
+            _locationErrorType = errType;
+            _locationStatusMessage = msg;
+            _isLoadingMosques = false;
+          });
+        }
         return;
       }
 
-      final List<MosqueItem> liveMosques = [];
-      final Set<String> seenNames = {};
+      final double resolvedLat = userLat;
+      final double resolvedLon = userLon;
+      _lastUserLat = resolvedLat;
+      _lastUserLon = resolvedLon;
 
-      // 2. Fetch real mosques from OpenStreetMap Nominatim using tight bounding box around user's location
-      try {
-        const double delta = 0.005; // Strict ~500 m walking radius bounding box
-        final osmUri = Uri.parse(
-          'https://nominatim.openstreetmap.org/search?format=json&q=mosque&bounded=1&viewbox=${userLon - delta},${userLat + delta},${userLon + delta},${userLat - delta}&limit=12&addressdetails=1&accept-language=en',
-        );
-        final osmReq = await client.getUrl(osmUri);
-        osmReq.headers.set('User-Agent', 'SmartSilentApp/1.0 (contact: support@kawiish.com)');
-        osmReq.headers.set('Accept-Language', 'en-US,en;q=0.9');
-        final osmResp = await osmReq.close();
-
-        if (osmResp.statusCode == 200) {
-          final osmBody = await osmResp.transform(utf8.decoder).join();
-          final List list = jsonDecode(osmBody);
-
-          for (int i = 0; i < list.length; i++) {
-            final item = list[i];
-            final mLat = double.tryParse(item['lat']?.toString() ?? '');
-            final mLon = double.tryParse(item['lon']?.toString() ?? '');
-
-            final namedetails = item['namedetails'] as Map<String, dynamic>?;
-            String name = (namedetails?['name:en'] ?? item['name'] ?? '').toString().trim();
-            final displayName = (item['display_name'] ?? '').toString().trim();
-            if (name.isEmpty && displayName.isNotEmpty) {
-              name = displayName.split(',')[0].trim();
-            }
-            if (name.isEmpty) continue;
-
-            // Convert any remaining Urdu characters to clean English
-            name = _urduToEnglish(name);
-
-            final lowerName = name.toLowerCase();
-            if (seenNames.contains(lowerName)) continue;
-            seenNames.add(lowerName);
-
-            if (!lowerName.contains('masjid') && !lowerName.contains('mosque')) {
-              name = 'Masjid $name';
-            }
-
-            final double distMeters = _calcDistanceMeters(userLat, userLon, mLat, mLon);
-            final int displayMeters = (distMeters <= 500 && distMeters >= 50)
-                ? distMeters.round()
-                : (90 + (liveMosques.length * 60)).clamp(70, 480);
-            final String distText = '$displayMeters m away';
-
-            final addr = item['address'] as Map<String, dynamic>?;
-            final address = _extractEnglishAddress(addr, displayName, locationName);
-
-            liveMosques.add(MosqueItem(
-              name: name,
-              address: address,
-              distanceText: distText,
-              lat: mLat,
-              lng: mLon,
-              imageUrl: images[liveMosques.length % images.length],
-            ));
-          }
+      // 3. Validate cached mosques ONLY against verified current coordinates
+      for (final legacyKey in const [
+        'saved_real_nearby_mosques',
+        'saved_real_nearby_mosques_v2',
+        'saved_real_nearby_mosques_v3',
+      ]) {
+        if (prefs.containsKey(legacyKey)) {
+          await prefs.remove(legacyKey);
         }
-      } catch (_) {}
+      }
 
-      // Sort strictly by closest distance (under 500m)
-      liveMosques.sort((a, b) {
-        final distA = int.tryParse(a.distanceText.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        final distB = int.tryParse(b.distanceText.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-        return distA.compareTo(distB);
-      });
+      List<MosqueItem> verifiedCache = [];
+      final bool cacheMatchesSpot = NearbyMasjidService.isCacheValidForCoordinates(
+        cachedLat: prefs.getDouble(_cacheLatKey),
+        cachedLng: prefs.getDouble(_cacheLngKey),
+        cachedTimestampMs: prefs.getInt(_cacheTimeKey),
+        currentLat: resolvedLat,
+        currentLng: resolvedLon,
+      );
 
-      // 4. If real mosques were found, update state and cache them for offline!
-      if (liveMosques.isNotEmpty && mounted) {
+      if (cacheMatchesSpot) {
+        verifiedCache = NearbyMasjidService.decodeAndValidateCachedMosques(
+          rawJson: prefs.getString(_cacheMosquesKey),
+          currentLat: resolvedLat,
+          currentLng: resolvedLon,
+        );
+        if (verifiedCache.isNotEmpty && mounted) {
+          setState(() {
+            _mosques = verifiedCache;
+            _isLoadingMosques = false;
+          });
+        }
+      } else {
+        if (mounted && _mosques.isNotEmpty) {
+          setState(() {
+            _mosques = [];
+            _isLoadingMosques = true;
+          });
+        }
+        await prefs.remove(_cacheMosquesKey);
+        await prefs.remove(_cacheLatKey);
+        await prefs.remove(_cacheLngKey);
+        await prefs.remove(_cacheTimeKey);
+        await prefs.remove(_cacheTagKey);
+      }
+
+      // 4. Race Overpass mirrors + Photon in parallel and display as soon as first source answers
+      List<dynamic> overpassElements = [];
+      final List<dynamic> photonFeatures = [];
+      bool anyOsmSuccess = false;
+
+      void publishMergedSnapshot() {
+        if (generation != _mosqueFetchGeneration || !mounted) return;
+        List<MosqueItem> snapshot = NearbyMasjidService.parseOverpassElements(
+          elements: overpassElements,
+          userLat: resolvedLat,
+          userLon: resolvedLon,
+        );
+        snapshot = NearbyMasjidService.parsePhotonFeatures(
+          features: photonFeatures,
+          userLat: resolvedLat,
+          userLon: resolvedLon,
+          existingResults: snapshot,
+        );
+        final List<MosqueItem> selected =
+            NearbyMasjidService.selectNearestLocalMosques(snapshot);
+        if (selected.isNotEmpty) {
+          setState(() {
+            _locationStatusMessage = '';
+            _locationErrorType = '';
+            _mosques = selected;
+            _isLoadingMosques = false;
+          });
+        }
+      }
+
+      Future<void> runOverpassParallel() async {
+        final String overpassQuery = NearbyMasjidService.buildOverpassQuery(
+          resolvedLat,
+          resolvedLon,
+        );
+        final String encoded = Uri.encodeComponent(overpassQuery);
+        final List<String> endpoints = [
+          'https://overpass-api.de/api/interpreter?data=$encoded',
+          'https://maps.mail.ru/osm/tools/overpass/api/interpreter?data=$encoded',
+          'https://overpass.kumi.systems/api/interpreter?data=$encoded',
+        ];
+        final completer = Completer<void>();
+        int remaining = endpoints.length;
+
+        for (final ep in endpoints) {
+          () async {
+            try {
+              final req = await client
+                  .getUrl(Uri.parse(ep))
+                  .timeout(const Duration(seconds: 6));
+              req.headers.set(
+                  'User-Agent', 'SmartSilentApp/1.0 (contact: support@kawiish.com)');
+              final resp =
+                  await req.close().timeout(const Duration(seconds: 7));
+              if (resp.statusCode == 200) {
+                final body = await resp
+                    .transform(utf8.decoder)
+                    .join()
+                    .timeout(const Duration(seconds: 7));
+                final decoded = jsonDecode(body);
+                if (decoded is Map && decoded['elements'] is List) {
+                  if (!completer.isCompleted) {
+                    anyOsmSuccess = true;
+                    overpassElements = decoded['elements'] as List;
+                    completer.complete();
+                    publishMergedSnapshot();
+                  }
+                  return;
+                }
+              }
+            } catch (_) {} finally {
+              remaining--;
+              if (remaining <= 0 && !completer.isCompleted) {
+                completer.complete();
+              }
+            }
+          }();
+        }
+        await completer.future;
+      }
+
+      Future<void> runPhotonParallel() async {
+        final double minLon = resolvedLon - 0.025;
+        final double maxLon = resolvedLon + 0.025;
+        final double minLat = resolvedLat - 0.025;
+        final double maxLat = resolvedLat + 0.025;
+        await Future.wait(['masjid', 'mosque'].map((q) async {
+          if (generation != _mosqueFetchGeneration) return;
+          try {
+            final uri = Uri.parse(
+              'https://photon.komoot.io/api/?q=$q&lat=$resolvedLat&lon=$resolvedLon&bbox=$minLon,$minLat,$maxLon,$maxLat&limit=20',
+            );
+            final req =
+                await client.getUrl(uri).timeout(const Duration(seconds: 4));
+            req.headers.set(
+                'User-Agent', 'SmartSilentApp/1.0 (contact: support@kawiish.com)');
+            final resp = await req.close().timeout(const Duration(seconds: 4));
+            if (resp.statusCode == 200) {
+              final body = await resp
+                  .transform(utf8.decoder)
+                  .join()
+                  .timeout(const Duration(seconds: 4));
+              final decoded = jsonDecode(body);
+              if (decoded is Map && decoded['features'] is List) {
+                anyOsmSuccess = true;
+                photonFeatures.addAll(decoded['features'] as List);
+              }
+            }
+          } catch (_) {}
+        }));
+        publishMergedSnapshot();
+      }
+
+      await Future.wait([
+        runOverpassParallel(),
+        runPhotonParallel(),
+      ]);
+
+      if (generation != _mosqueFetchGeneration || !mounted) return;
+
+      // Merge Overpass + Photon results strictly around GPS coordinates
+      List<MosqueItem> allCandidates = NearbyMasjidService.parseOverpassElements(
+        elements: overpassElements,
+        userLat: resolvedLat,
+        userLon: resolvedLon,
+      );
+      allCandidates = NearbyMasjidService.parsePhotonFeatures(
+        features: photonFeatures,
+        userLat: resolvedLat,
+        userLon: resolvedLon,
+        existingResults: allCandidates,
+      );
+
+      // 5. Fallback Nominatim search if Overpass + Photon yielded < 2 results
+      if (allCandidates.length < 2) {
+        const double delta =
+            (NearbyMasjidService.maxSearchRadiusMeters / 111000.0) * 1.15;
+        const List<String> nominatimQueries = ['masjid', 'mosque'];
+        for (int idx = 0; idx < nominatimQueries.length; idx++) {
+          if (generation != _mosqueFetchGeneration) return;
+          if (idx > 0) {
+            await Future.delayed(const Duration(milliseconds: 1100));
+          }
+          try {
+            final q = Uri.encodeQueryComponent(nominatimQueries[idx]);
+            final osmUri = Uri.parse(
+              'https://nominatim.openstreetmap.org/search?format=json&q=$q&bounded=1&viewbox=${resolvedLon - delta},${resolvedLat + delta},${resolvedLon + delta},${resolvedLat - delta}&limit=15&addressdetails=1&namedetails=1&extratags=1&accept-language=en',
+            );
+            final osmReq =
+                await client.getUrl(osmUri).timeout(const Duration(seconds: 5));
+            osmReq.headers
+                .set('User-Agent', 'SmartSilentApp/1.0 (contact: support@kawiish.com)');
+            osmReq.headers.set('Accept-Language', 'en-US,en;q=0.9');
+            final osmResp =
+                await osmReq.close().timeout(const Duration(seconds: 5));
+            if (osmResp.statusCode == 200) {
+              final osmBody = await osmResp
+                  .transform(utf8.decoder)
+                  .join()
+                  .timeout(const Duration(seconds: 5));
+              final decoded = jsonDecode(osmBody);
+              if (decoded is List) {
+                anyOsmSuccess = true;
+                allCandidates = NearbyMasjidService.parseNominatimItems(
+                  items: decoded,
+                  userLat: resolvedLat,
+                  userLon: resolvedLon,
+                  existingResults: allCandidates,
+                );
+              }
+            }
+          } catch (_) {}
+          if (allCandidates.length >= 4) break;
+        }
+      }
+
+      if (generation != _mosqueFetchGeneration || !mounted) return;
+
+      final List<MosqueItem> selectedMosques =
+          NearbyMasjidService.selectNearestLocalMosques(allCandidates);
+
+      if (selectedMosques.isNotEmpty) {
         setState(() {
-          _isOnline = true;
-          _currentLocationTag = locationName;
-          _mosques = liveMosques;
+          _locationStatusMessage = '';
+          _locationErrorType = '';
+          _mosques = selectedMosques;
         });
 
-        // Persist real mosques in local storage (available completely offline!)
-        final prefs = await SharedPreferences.getInstance();
-        final jsonStr = jsonEncode(liveMosques.map((e) => e.toJson()).toList());
-        await prefs.setString('saved_real_nearby_mosques', jsonStr);
-        await prefs.setString('cached_location_tag', locationName);
-      } else if (_mosques.isEmpty) {
-        await _loadCachedRealMosques();
+        final jsonStr =
+            jsonEncode(selectedMosques.map((e) => e.toJson()).toList());
+        await prefs.setString(_cacheMosquesKey, jsonStr);
+        await prefs.setDouble(_cacheLatKey, resolvedLat);
+        await prefs.setDouble(_cacheLngKey, resolvedLon);
+        await prefs.setInt(
+            _cacheTimeKey, DateTime.now().millisecondsSinceEpoch);
+      } else if (anyOsmSuccess) {
+        await prefs.remove(_cacheMosquesKey);
+        await prefs.remove(_cacheLatKey);
+        await prefs.remove(_cacheLngKey);
+        await prefs.remove(_cacheTimeKey);
+        setState(() {
+          _mosques = [];
+          _locationErrorType = 'no_results';
+          _locationStatusMessage =
+              'No OpenStreetMap masjids mapped near your GPS location. Tap below to view on Google Maps.';
+        });
+      } else if (verifiedCache.isNotEmpty) {
+        setState(() {
+          _mosques = verifiedCache;
+          _locationErrorType = '';
+          _locationStatusMessage = '';
+        });
+      } else {
+        setState(() {
+          _mosques = [];
+          _locationErrorType = 'network_error';
+          _locationStatusMessage =
+              'Unable to load nearby masjids. Check internet & pull down to retry.';
+        });
       }
     } catch (_) {
-      // If error or offline, fallback to already-cached real mosques
-      if (_mosques.isEmpty) {
-        await _loadCachedRealMosques();
+      if (generation == _mosqueFetchGeneration && mounted && _mosques.isEmpty) {
+        setState(() {
+          _locationErrorType = 'network_error';
+          _locationStatusMessage =
+              'Unable to load nearby masjids. Tap here to try again.';
+        });
       }
     } finally {
-      if (mounted) {
+      client.close(force: true);
+      if (generation == _mosqueFetchGeneration && mounted) {
         setState(() => _isLoadingMosques = false);
       }
     }
-  }
-
-  double _parseDistanceInMeters(String text) {
-    if (text.contains('km')) {
-      final val = double.tryParse(text.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 1.0;
-      return val * 1000.0;
-    }
-    return double.tryParse(text.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 500.0;
-  }
-
-  // Calculate distance in meters using Haversine formula
-  double _calcDistanceMeters(double lat1, double lon1, double? lat2, double? lon2) {
-    if (lat2 == null || lon2 == null) return 350.0;
-    const p = 0.017453292519943295;
-    final a = 0.5 - math.cos((lat2 - lat1) * p) / 2 +
-        math.cos(lat1 * p) * math.cos(lat2 * p) *
-            (1 - math.cos((lon2 - lon1) * p)) / 2;
-    return 12742000 * math.asin(math.sqrt(a));
   }
 
   // Open Google Maps navigation for mosque with exact pin coordinates
@@ -720,29 +792,34 @@ class _TabBarDemoState extends State<TabBarDemo> {
     final int alarmIdEnd = alarmIdStart + 1;
 
     try {
-      // 1. Immediately silence the phone now
-      await SoundMode.setSoundMode(RingerModeStatus.silent);
-    } on PlatformException {
-      Fluttertoast.showToast(
-        msg: "Please grant Do Not Disturb permission!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        backgroundColor: const Color(0xFF389EB4),
-        textColor: Colors.white,
+      // 1. Immediately silence the phone now & track active quick window
+      await SoundControlHelper.enterSilentWindow(
+        sourceId: 'quick_silent',
+        endTime: end,
+        vibrate: false,
+        endAlarmId: alarmIdEnd,
       );
-      await PermissionHandler.openDoNotDisturbSetting();
-      return;
     } catch (_) {}
 
     try {
       // 2. Schedule restore back to Normal mode after duration
-      await AndroidAlarmManager.oneShotAt(
-        end,
-        alarmIdEnd,
-        restoreNormalModeCallback,
-        exact: true,
-        wakeup: true,
-      );
+      try {
+        await AndroidAlarmManager.oneShotAt(
+          end,
+          alarmIdEnd,
+          restoreNormalModeCallback,
+          exact: true,
+          wakeup: true,
+        );
+      } catch (_) {
+        await AndroidAlarmManager.oneShotAt(
+          end,
+          alarmIdEnd,
+          restoreNormalModeCallback,
+          exact: false,
+          wakeup: true,
+        );
+      }
 
       // 3. Save to database
       final quickSchedule = ScheduleModel(
@@ -1206,12 +1283,17 @@ class _TabBarDemoState extends State<TabBarDemo> {
                     ),
                   ),
 
-                  // Main Scrollable Body
+                  // Main Scrollable Body (Pull down to refresh nearby masjids)
                   Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 165), // Space for bottom Quick Silent bar & raised FAB
-                      child: Column(
+                    child: RefreshIndicator(
+                      color: const Color(0xFF389EB4),
+                      onRefresh: () => _fetchLiveNearbyMosques(forceFresh: true),
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.only(bottom: 165), // Space for bottom Quick Silent bar & raised FAB
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 8),
@@ -1264,11 +1346,11 @@ class _TabBarDemoState extends State<TabBarDemo> {
                                   imagePath: 'assets/images/2.jpg',
                                   title: 'One Time',
                                   isSelected: _selectedScheduleTabIndex == 1,
-                                  onTap: () {
+                                  onTap: () async {
                                     setState(() => _selectedScheduleTabIndex = 1);
-                                    Navigator.push(
+                                    await Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (context) => CreateSchedule()),
+                                      MaterialPageRoute(builder: (context) => const OneTime()),
                                     );
                                   },
                                 ),
@@ -1290,7 +1372,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
 
                           const SizedBox(height: 20),
 
-                          // 4. "Near By Masjids" Section
+                          // 4. "Near By Masjids" Section (Clean header, no location pill, 500 badge, or refresh icon)
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 20.0),
                             child: Text(
@@ -1306,39 +1388,135 @@ class _TabBarDemoState extends State<TabBarDemo> {
                           const SizedBox(height: 12),
 
                           // Compact Horizontal Mosque Cards Row
-                          SizedBox(
-                            height: 165,
-                            child: _isLoadingMosques && _mosques.isEmpty
-                                ? const Center(
-                                    child: SizedBox(
-                                      width: 28,
-                                      height: 28,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: Color(0xFF389EB4),
+                          if (_isLoadingMosques && _mosques.isEmpty)
+                            _buildMosqueLoadingRow()
+                          else if (_mosques.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(18),
+                                onTap: _handleMosqueEmptyCardTap,
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x0A000000),
+                                        blurRadius: 10,
+                                        offset: Offset(0, 4),
                                       ),
-                                    ),
-                                  )
-                                : _mosques.isEmpty
-                                    ? const SizedBox()
-                                    : ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        physics: const BouncingScrollPhysics(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                                        itemCount: _mosques.length,
-                                        itemBuilder: (context, index) {
-                                          return _buildMosqueCard(
-                                            mosque: _mosques[index],
-                                            onTap: () => _launchMosqueLocation(_mosques[index]),
-                                          );
-                                        },
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 46,
+                                        height: 46,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              const Color(0xFF389EB4).withOpacity(0.16),
+                                              const Color(0xFF0F766E).withOpacity(0.10),
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          _locationErrorType == 'location_disabled'
+                                              ? Icons.location_off_rounded
+                                              : Icons.mosque_rounded,
+                                          color: const Color(0xFF0F766E),
+                                          size: 22,
+                                        ),
                                       ),
-                          ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _locationErrorType == 'location_disabled'
+                                                  ? 'Turn On Device GPS'
+                                                  : _locationErrorType == 'approximate_only'
+                                                      ? 'Enable Precise Location'
+                                                      : 'Find Nearby Masjids',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _locationStatusMessage.isNotEmpty
+                                                  ? _locationStatusMessage
+                                                  : 'Tap to load masjids near your current location.',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 11.5,
+                                                color: Color(0xFF64748B),
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                            if (_locationErrorType == 'no_results') ...[
+                                              const SizedBox(height: 8),
+                                              GestureDetector(
+                                                onTap: _openGoogleMapsMasjidSearch,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF389EB4).withOpacity(0.12),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Text(
+                                                    'Open in Google Maps',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: Color(0xFF389EB4),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            SizedBox(
+                              height: 192,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: _mosques.length,
+                                itemBuilder: (context, index) {
+                                  return _buildMosqueCard(
+                                    mosque: _mosques[index],
+                                    onTap: () => _launchMosqueLocation(_mosques[index]),
+                                  );
+                                },
+                              ),
+                            ),
 
                           const SizedBox(height: 20),
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -1628,78 +1806,163 @@ class _TabBarDemoState extends State<TabBarDemo> {
     );
   }
 
-  // Compact Near By Mosque Card (Strictly <= 500m)
+  Widget _buildMosqueLoadingRow() {
+    return SizedBox(
+      height: 192,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 3,
+        itemBuilder: (context, index) {
+          return Container(
+            width: 210,
+            margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 94,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+                  ),
+                  child: index == 0
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Color(0xFF389EB4),
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 12,
+                        width: 130,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 10,
+                        width: 95,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Polished Near By Mosque Card using bundled local mosque photos
   Widget _buildMosqueCard({
     required MosqueItem mosque,
     required VoidCallback onTap,
   }) {
+    final String walkTime = NearbyMasjidService.formatWalkTime(mosque.distanceMeters);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 195,
+        width: 210,
         margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0).withOpacity(0.8)),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x10000000),
-              blurRadius: 8,
-              offset: Offset(0, 3),
+              color: Color(0x0F000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Mosque Image with Distance Badge (Strictly <= 500m)
+            // Bundled Local Mosque Photo with Subtle Gradient & Distance Pill
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
                   child: SizedBox(
-                    height: 88,
+                    height: 94,
                     width: double.infinity,
-                    child: mosque.imageUrl.startsWith('http')
-                        ? Image.network(
-                            mosque.imageUrl,
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                height: 88,
-                                width: double.infinity,
-                                color: const Color(0xFFF1F5F9),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF389EB4),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) => _buildMosqueFallbackTile(),
-                          )
-                        : Image.asset(
-                            mosque.imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildMosqueFallbackTile(),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        mosque.imageUrl.startsWith('http')
+                            ? Image.asset(
+                                NearbyMasjidService.mosqueImagePool.first,
+                                fit: BoxFit.cover,
+                                cacheWidth: 480,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    _buildMosqueFallbackTile(),
+                              )
+                            : Image.asset(
+                                mosque.imageUrl,
+                                fit: BoxFit.cover,
+                                cacheWidth: 480,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    _buildMosqueFallbackTile(),
+                              ),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.38),
+                              ],
+                              stops: const [0.45, 1.0],
+                            ),
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Positioned(
-                  top: 6,
-                  right: 6,
+                  top: 7,
+                  right: 7,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.70),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white24, width: 0.5),
+                      color: Colors.black.withOpacity(0.72),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white24, width: 0.6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1709,7 +1972,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
                         Text(
                           mosque.distanceText,
                           style: const TextStyle(
-                            fontSize: 9.5,
+                            fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -1722,56 +1985,86 @@ class _TabBarDemoState extends State<TabBarDemo> {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+                padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      mosque.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    Row(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 1.0),
-                          child: Icon(Icons.location_on, size: 12, color: Color(0xFF389EB4)),
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            mosque.address,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF64748B),
-                              height: 1.25,
-                            ),
+                        Text(
+                          mosque.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: -0.1,
                           ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.location_on_rounded, size: 12, color: Color(0xFF389EB4)),
+                            const SizedBox(width: 3),
+                            Expanded(
+                              child: Text(
+                                mosque.address,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: const [
-                        Text(
-                          'Navigate',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF389EB4),
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.directions_walk_rounded, size: 12, color: Color(0xFF64748B)),
+                            const SizedBox(width: 2),
+                            Text(
+                              walkTime,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF389EB4).withOpacity(0.11),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Text(
+                                'Navigate',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0E7490),
+                                ),
+                              ),
+                              SizedBox(width: 3),
+                              Icon(Icons.directions_rounded, size: 12, color: Color(0xFF0E7490)),
+                            ],
                           ),
                         ),
-                        SizedBox(width: 2),
-                        Icon(Icons.directions, size: 13, color: Color(0xFF389EB4)),
                       ],
                     ),
                   ],
@@ -1787,7 +2080,7 @@ class _TabBarDemoState extends State<TabBarDemo> {
   // Bottom Quick Silent Bar + Raised Floating Action Button (+)
   Widget _buildBottomQuickSilentWithFab() {
     return SizedBox(
-      height: 160,
+      height: 172,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.bottomCenter,
@@ -1836,9 +2129,9 @@ class _TabBarDemoState extends State<TabBarDemo> {
             ),
           ),
 
-          // 2. Floating Action Button (+) raised higher, hovering ABOVE Quick Silent card
+          // 2. Floating Action Button (+) raised comfortably ABOVE Quick Silent card
           Positioned(
-            bottom: 86,
+            bottom: 104,
             right: 22,
             child: Material(
               color: Colors.transparent,

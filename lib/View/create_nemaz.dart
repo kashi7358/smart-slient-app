@@ -175,16 +175,16 @@ class _CreateNemazState extends State<CreateNemaz> {
     setState(() => _isSaving = true);
 
     try {
-      // 1. Check Do Not Disturb (DND) permissions
-      final bool isGranted = (await PermissionHandler.permissionsGranted) ?? false;
-      if (!isGranted) {
-        Fluttertoast.showToast(
-          msg: "Please allow Do Not Disturb (DND) so phone can be silenced during prayer!",
-          toastLength: Toast.LENGTH_LONG,
-          backgroundColor: const Color(0xFFEF4444),
-          textColor: Colors.white,
-        );
-        await PermissionHandler.openDoNotDisturbSetting();
+      // 1. Check Do Not Disturb (DND) permissions non-intrusively (no forceful screen jumping)
+      bool isGranted = false;
+      try {
+        isGranted = (await PermissionHandler.permissionsGranted.timeout(
+              const Duration(milliseconds: 1000),
+              onTimeout: () => false,
+            )) ??
+            false;
+      } catch (_) {
+        isGranted = false;
       }
 
       final now = DateTime.now();
@@ -619,30 +619,40 @@ class _CreateNemazState extends State<CreateNemaz> {
 
                     const SizedBox(height: 6),
 
-                    // Smart Mode Toggle Card (matching Image exactly)
+                    // Smart Mode Toggle Card (Mutually exclusive: only one selected at a time)
                     _buildToggleCard(
                       title: 'Smart Mode',
-                      subtitle: 'Auto adjust times',
+                      subtitle: isSmartMode
+                          ? 'Active: Auto-adjusting prayer times dynamically'
+                          : 'Tap to switch to auto-adjust prayer times',
                       icon: Icons.notifications_active_rounded,
                       iconBgColor: const Color(0xFFE0F2FE),
                       iconColor: const Color(0xFF0284C7),
                       value: isSmartMode,
                       onChanged: (val) {
-                        setState(() => isSmartMode = val);
+                        setState(() {
+                          isSmartMode = true;
+                          isVibrateMode = false;
+                        });
                         _saveTimingsAndScheduleAlarms(showToastMessage: false);
                       },
                     ),
 
-                    // Silent Mode Toggle Card (matching Image exactly)
+                    // Silent Mode Toggle Card (Mutually exclusive: only one selected at a time)
                     _buildToggleCard(
                       title: 'Silent Mode',
-                      subtitle: isVibrateMode ? 'Device will vibrate during prayers' : 'Device will stay silent during prayers',
+                      subtitle: !isSmartMode
+                          ? 'Active: Fixed saved prayer times'
+                          : 'Tap to switch to fixed manual prayer times',
                       icon: Icons.notifications_off_rounded,
                       iconBgColor: const Color(0xFFEDE9FE),
                       iconColor: const Color(0xFF7C3AED),
-                      value: !isVibrateMode,
+                      value: !isSmartMode,
                       onChanged: (val) {
-                        setState(() => isVibrateMode = !val);
+                        setState(() {
+                          isSmartMode = false;
+                          isVibrateMode = false;
+                        });
                         _saveTimingsAndScheduleAlarms(showToastMessage: false);
                       },
                     ),
@@ -1006,70 +1016,76 @@ class _CreateNemazState extends State<CreateNemaz> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEBF0F5), width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A0F172A),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: value ? const Color(0xFF0284C7).withOpacity(0.35) : const Color(0xFFEBF0F5),
+            width: value ? 1.5 : 1.2,
           ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          // Left Icon Badge in circle
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: value ? const Color(0x150284C7) : const Color(0x0A0F172A),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-            child: Center(
-              child: Icon(icon, color: iconColor, size: 24),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            // Left Icon Badge in circle
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: iconBgColor,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
 
-          // Title & Subtitle
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+            // Title & Subtitle
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w400,
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          // Cupertino Switch toggle
-          CupertinoSwitch(
-            value: value,
-            activeColor: const Color(0xFF0284C7),
-            onChanged: onChanged,
-          ),
-        ],
+            // Cupertino Switch toggle
+            CupertinoSwitch(
+              value: value,
+              activeColor: const Color(0xFF0284C7),
+              onChanged: onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,35 +6,33 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
+import 'package:smart_silent/Utils/one_time_alarm_helper.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/models/schedule_model.dart';
 import 'package:sound_mode/permission_handler.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
-// Public entry-points for AndroidAlarmManager
+// Public entry-points for AndroidAlarmManager forwarded to OneTimeAlarmHelper
 @pragma('vm:entry-point')
 void scheduleSilentCallback() async {
-  try {
-    await SoundMode.setSoundMode(RingerModeStatus.silent);
-  } catch (_) {}
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
 }
 
 @pragma('vm:entry-point')
 void scheduleVibrateCallback() async {
-  try {
-    await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-  } catch (_) {}
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
 }
 
 @pragma('vm:entry-point')
 void scheduleNormalCallback() async {
-  try {
-    await SoundMode.setSoundMode(RingerModeStatus.normal);
-  } catch (_) {}
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneTimeAlarmHelper.handleOneTimeEnd();
 }
 
 class CreateSchedule extends StatefulWidget {
-  const CreateSchedule({super.key});
+  final ScheduleModel? scheduleToEdit;
+  const CreateSchedule({super.key, this.scheduleToEdit});
 
   @override
   State<CreateSchedule> createState() => _CreateScheduleState();
@@ -71,6 +69,12 @@ class _CreateScheduleState extends State<CreateSchedule> {
   void initState() {
     super.initState();
     initBannerAd();
+    if (widget.scheduleToEdit != null) {
+      nameController.text = widget.scheduleToEdit!.name;
+      startDateTime = widget.scheduleToEdit!.Start;
+      endDateTime = widget.scheduleToEdit!.End;
+      isVibrateMode = widget.scheduleToEdit!.isSilentOrVibration;
+    }
   }
 
   @override
@@ -185,79 +189,59 @@ class _CreateScheduleState extends State<CreateSchedule> {
       return;
     }
 
-    // Check DND permission
-    final isGranted = await PermissionHandler.permissionsGranted;
-    if (isGranted != true) {
-      Fluttertoast.showToast(
-        msg: "Please allow Do Not Disturb permission!",
-        backgroundColor: const Color(0xFF389EB4),
-        textColor: Colors.white,
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-      return;
+    // Check DND permission non-intrusively (no forceful screen hijacking)
+    bool isDndAllowed = false;
+    try {
+      isDndAllowed = (await PermissionHandler.permissionsGranted.timeout(
+            const Duration(milliseconds: 1000),
+            onTimeout: () => false,
+          )) ??
+          false;
+    } catch (_) {
+      isDndAllowed = false;
     }
 
-    final data = ScheduleModel(
-      name: title,
-      Start: startDateTime,
-      End: endDateTime,
-      isSilentOrVibration: isVibrateMode,
-      isTaskActivated: true,
-      quickTime: 0,
-    );
+    final bool isEditing = widget.scheduleToEdit != null;
 
-    final box = Boxes.getData();
-    await box.add(data);
+    if (isEditing) {
+      await OneTimeAlarmHelper.cancelOneTime(widget.scheduleToEdit!);
+
+      widget.scheduleToEdit!.name = title;
+      widget.scheduleToEdit!.Start = startDateTime;
+      widget.scheduleToEdit!.End = endDateTime;
+      widget.scheduleToEdit!.isSilentOrVibration = isVibrateMode;
+      widget.scheduleToEdit!.isTaskActivated = true;
+      await widget.scheduleToEdit!.save();
+
+      await OneTimeAlarmHelper.scheduleOneTime(widget.scheduleToEdit!);
+    } else {
+      final data = ScheduleModel(
+        name: title,
+        Start: startDateTime,
+        End: endDateTime,
+        isSilentOrVibration: isVibrateMode,
+        isTaskActivated: true,
+        quickTime: 0,
+      );
+
+      final box = Boxes.getData();
+      await box.add(data);
+      await OneTimeAlarmHelper.scheduleOneTime(data);
+    }
 
     if (mounted) {
+      final box = Boxes.getData();
       Provider.of<CountProvider>(context, listen: false).updateHasData(box.isNotEmpty);
     }
 
-    final int alarmIdStart = (startDateTime.millisecondsSinceEpoch ~/ 1000) % 100000;
-    final int alarmIdEnd = alarmIdStart + 1;
-
-    try {
-      await AndroidAlarmManager.oneShotAt(
-        startDateTime,
-        alarmIdStart,
-        isVibrateMode ? scheduleVibrateCallback : scheduleSilentCallback,
-        exact: true,
-        wakeup: true,
-      );
-    } catch (_) {
-      try {
-        await AndroidAlarmManager.oneShotAt(
-          startDateTime,
-          alarmIdStart,
-          isVibrateMode ? scheduleVibrateCallback : scheduleSilentCallback,
-          exact: false,
-          wakeup: true,
-        );
-      } catch (_) {}
-    }
-
-    try {
-      await AndroidAlarmManager.oneShotAt(
-        endDateTime,
-        alarmIdEnd,
-        scheduleNormalCallback,
-        exact: true,
-        wakeup: true,
-      );
-    } catch (_) {
-      try {
-        await AndroidAlarmManager.oneShotAt(
-          endDateTime,
-          alarmIdEnd,
-          scheduleNormalCallback,
-          exact: false,
-          wakeup: true,
-        );
-      } catch (_) {}
-    }
+    final String toastMsg = isEditing
+        ? "Schedule updated successfully!"
+        : ((!isDndAllowed && !isVibrateMode)
+            ? "Schedule created! (Will vibrate until DND access is allowed)"
+            : "Schedule created successfully!");
 
     Fluttertoast.showToast(
-      msg: "Schedule created successfully!",
+      msg: toastMsg,
       backgroundColor: const Color(0xFF389EB4),
       textColor: Colors.white,
     );
@@ -285,9 +269,9 @@ class _CreateScheduleState extends State<CreateSchedule> {
             icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 20),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text(
-            'Create One Time',
-            style: TextStyle(
+          title: Text(
+            widget.scheduleToEdit != null ? 'Edit One Time' : 'Create One Time',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Color(0xFF1E293B),
@@ -655,14 +639,14 @@ class _CreateScheduleState extends State<CreateSchedule> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 21),
-                            SizedBox(width: 8),
+                            const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 21),
+                            const SizedBox(width: 8),
                             Text(
-                              'SAVE SCHEDULE',
-                              style: TextStyle(
+                              widget.scheduleToEdit != null ? 'UPDATE SCHEDULE' : 'SAVE SCHEDULE',
+                              style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,

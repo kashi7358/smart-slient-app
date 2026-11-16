@@ -3,18 +3,16 @@ import 'dart:math';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_nemaz.dart';
 import 'package:smart_silent/models/nemaz_model.dart';
 import 'package:sound_mode/permission_handler.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
 import '../constants.dart';
 
@@ -1065,63 +1063,23 @@ class _NemazState extends State<Nemaz> {
 
   @pragma('vm:entry-point')
   static Future<void> setSilentMode() async {
-    print("Silent method Called for repeated");
     try {
-      await SoundMode.setSoundMode(RingerModeStatus.silent);
-    } on PlatformException {
-      print('Do Not Disturb access permissions required!');
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-    }
+      await SoundControlHelper.applySilentOrVibrate(vibrate: false);
+    } catch (_) {}
   }
 
   @pragma('vm:entry-point')
   static Future<void> setNormalMode() async {
-    print("normal mode called for repeated");
     try {
-      await SoundMode.setSoundMode(RingerModeStatus.normal);
-    } on PlatformException {
-      print('Do Not Disturb access permissions required!');
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-    }
+      await SoundControlHelper.restoreNormalMode();
+    } catch (_) {}
   }
 
   @pragma('vm:entry-point')
   static Future<void> setVibrateMode() async {
-    print("vibration mode called for repeated");
     try {
-      await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-    } on PlatformException {
-      print('Do Not Disturb access permissions required!');
-      Fluttertoast.showToast(
-        msg: "Allow DND permissions from settings!",
-        toastLength: Toast.LENGTH_LONG,
-        
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 1,
-        textColor: AppColors.kPrimary,
-        backgroundColor: AppColors.kSecondary,
-        // fontSize: 16.0
-      );
-      await PermissionHandler.openDoNotDisturbSetting();
-    }
+      await SoundControlHelper.applySilentOrVibrate(vibrate: true);
+    } catch (_) {}
   }
 //  static Future<void> Check() async {
 //     print("Check mode called");

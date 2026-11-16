@@ -12,6 +12,15 @@ subprojects {
 
 subprojects { project ->
     if (project.name != 'app') {
+        project.plugins.withId('com.android.library') {
+            project.androidComponents {
+                finalizeDsl { ext ->
+                    if (ext.compileSdk == null || ext.compileSdk < 36) {
+                        ext.compileSdk = 36
+                    }
+                }
+            }
+        }
         def fix = {
             if (project.hasProperty('android')) {
                 project.android {

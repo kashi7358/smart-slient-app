@@ -3,9 +3,8 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
+import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/models/repeated_model.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
 // Top-level VM entry-point callbacks for Meeting Schedules (slots 0-9)
 @pragma('vm:entry-point')
@@ -140,19 +139,19 @@ class MeetingAlarmHelper {
 
       if (isTodayAllowed) {
         final isVibrate = prefs.getBool('meeting_${slot}_vibrate') ?? false;
-        if (isVibrate) {
-          try {
-            await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-          } catch (_) {}
-        } else {
-          try {
-            await SoundMode.setSoundMode(RingerModeStatus.silent);
-          } catch (_) {
-            try {
-              await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-            } catch (_) {}
-          }
+        final endH = prefs.getInt('meeting_${slot}_end_h') ?? 10;
+        final endM = prefs.getInt('meeting_${slot}_end_m') ?? 0;
+        DateTime targetEnd = DateTime(now.year, now.month, now.day, endH, endM);
+        if (targetEnd.isBefore(now)) {
+          targetEnd = targetEnd.add(const Duration(days: 1));
         }
+
+        await SoundControlHelper.enterSilentWindow(
+          sourceId: 'meeting_$slot',
+          endTime: targetEnd,
+          vibrate: isVibrate,
+          endAlarmId: _baseEndId + (slot * 2),
+        );
       }
 
       // Automatically re-arm start alarm for tomorrow
@@ -189,9 +188,7 @@ class MeetingAlarmHelper {
       final bool isTodayAllowed = allowedDays.contains(currentDayOfWeek);
 
       if (isTodayAllowed) {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.normal);
-        } catch (_) {}
+        await SoundControlHelper.leaveSilentWindow(sourceId: 'meeting_$slot');
       }
 
       // Automatically re-arm end alarm for tomorrow
@@ -293,6 +290,7 @@ class MeetingAlarmHelper {
       try {
         await AndroidAlarmManager.cancel(endAlarmId);
       } catch (_) {}
+      await SoundControlHelper.leaveSilentWindow(sourceId: 'meeting_$slot');
     }
   }
 
