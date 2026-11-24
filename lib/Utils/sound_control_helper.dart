@@ -1,7 +1,12 @@
 import 'dart:convert';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_silent/models/nemaz_model.dart';
+import 'package:smart_silent/models/repeated_model.dart';
+import 'package:smart_silent/models/schedule_model.dart';
 import 'package:sound_mode/sound_mode.dart';
 import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
@@ -20,9 +25,6 @@ import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 /// 3. Robust Error Fallback: If DND permission is restricted, gracefully falls back
 ///    to Vibrate mode so the device is never loudly ringing in sacred/quiet hours.
 class SoundControlHelper {
-  static const MethodChannel _platformChannel =
-      MethodChannel('com.kawiish.smartsilent/device_compatibility');
-
   static const String _keyAppManagedActive = 'app_managed_sound_active';
   static const String _keyAppLastSetMs = 'app_last_set_ms';
   static const String _keyAppManagedEndMs = 'app_managed_end_ms';
@@ -66,20 +68,39 @@ class SoundControlHelper {
     } catch (_) {}
   }
 
+  /// Ensures Hive and all required boxes are opened in background alarm callbacks
+  static Future<void> ensureHiveInitialized() async {
+    try {
+      if (!Hive.isBoxOpen('schedules') || !Hive.isBoxOpen('daily') || !Hive.isBoxOpen('nemaz')) {
+        final dir = await getApplicationDocumentsDirectory();
+        Hive.init(dir.path);
+        if (!Hive.isAdapterRegistered(ScheduleModelAdapter().typeId)) Hive.registerAdapter(ScheduleModelAdapter());
+        if (!Hive.isAdapterRegistered(RepeatedModelAdapter().typeId)) Hive.registerAdapter(RepeatedModelAdapter());
+        if (!Hive.isAdapterRegistered(NemazModelAdapter().typeId)) Hive.registerAdapter(NemazModelAdapter());
+        if (!Hive.isBoxOpen('schedules')) await Hive.openBox<ScheduleModel>('schedules');
+        if (!Hive.isBoxOpen('daily')) await Hive.openBox<RepeatedModel>('daily');
+        if (!Hive.isBoxOpen('nemaz')) await Hive.openBox<NemazModel>('nemaz');
+        debugPrint('[SmartSilent] Background Hive boxes verified/opened');
+      }
+    } catch (e) {
+      debugPrint('[SmartSilent] Error ensuring Hive initialized: $e');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Public Window Management API
   // ---------------------------------------------------------------------------
 
-  /// Enters a named silent/vibrate window (e.g. 'prayer_fajr', 'meeting_0', 'quick_silent').
+  /// Enters a named silent/vibrate window (e.g. 'prayer_fajr', 'meeting_0', 'one_time_schedule', 'quick_silent').
   ///
-  /// If the user previously manually took the phone out of silent mode for this
-  /// period, this function registers the window for tracking but REFUSES to re-silence
-  /// the phone, honoring the user's manual intent.
+  /// Guarantees that when an active schedule arrives at its scheduled time,
+  /// the device is properly transitioned to Silent/Vibrate mode reliably.
   static Future<bool> enterSilentWindow({
     required String sourceId,
     required DateTime endTime,
     required bool vibrate,
     int? endAlarmId,
+    bool isResumeOrSync = false,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -88,11 +109,21 @@ class SoundControlHelper {
       final int nowMs = DateTime.now().millisecondsSinceEpoch;
       final int endMs = endTime.millisecondsSinceEpoch;
 
-      // 1. Check if user manually took phone to Normal mode during the current window
-      final int overrideUntilMs = prefs.getInt(_keyManualOverrideUntilMs) ?? 0;
-      final bool isOverrideActive = (nowMs < overrideUntilMs);
+      if (isResumeOrSync) {
+        // Protection only for re-sync/resume: if user manually set Normal DURING this active window, do not re-silence
+        final int overrideUntilMs = prefs.getInt(_keyManualOverrideUntilMs) ?? 0;
+        if (nowMs < overrideUntilMs && endMs <= overrideUntilMs) {
+          debugPrint('[SmartSilent] User manual override active for current window ($sourceId). Not re-silencing.');
+          return false;
+        }
+      } else {
+        // Fresh start (alarms & Quick Silent): clear manual override so scheduling always silences
+        await prefs.remove(_keyManualOverrideUntilMs);
+        await prefs.remove(_keyManualOverrideMs);
+        debugPrint('[SmartSilent] Override cleared on fresh start for $sourceId');
+      }
 
-      // 2. Load existing active windows and update with this new window
+      // Load existing active windows and update with this new window
       final windows = await _loadActiveWindows(prefs);
 
       // Clean out expired windows
@@ -118,13 +149,8 @@ class SoundControlHelper {
       }
 
       await prefs.setInt(_keyAppManagedEndMs, maxEndMs);
-      if (endAlarmId != null) {
+      if (endAlarmId != null && sourceId.startsWith('quick_')) {
         await prefs.setInt(_keyQuickEndAlarmId, endAlarmId);
-      }
-
-      // If user manually un-silenced during this active period, DO NOT RE-SILENCE!
-      if (isOverrideActive) {
-        return false;
       }
 
       // 3. Apply silent or vibrate mode
@@ -200,34 +226,21 @@ class SoundControlHelper {
   }
 
   // ---------------------------------------------------------------------------
-  // Low-level Native Sound Transition
+  // Low-level Native Sound Transition (via sound_mode plugin, never custom MethodChannel)
   // ---------------------------------------------------------------------------
 
   static Future<void> _setNativeSoundMode({required bool vibrate}) async {
-    // 1. Try native AudioManager first (bypasses sound_mode package permission crashes)
+    // Change ringer via sound_mode plugin, never the custom MethodChannel.
+    // Replace RINGER_MODE_SILENT with RINGER_MODE_VIBRATE so DND is not triggered.
     try {
-      final String modeStr = vibrate ? 'vibrate' : 'silent';
-      final dynamic res = await _platformChannel.invokeMethod('setNativeRingerMode', {'mode': modeStr});
-      if (res != null) return;
-    } catch (_) {}
-
-    // 2. Secondary fallback to sound_mode plugin if native channel is unavailable
-    if (vibrate) {
-      try {
-        await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-      } catch (_) {}
-    } else {
-      try {
-        await SoundMode.setSoundMode(RingerModeStatus.silent);
-      } catch (_) {
-        try {
-          await SoundMode.setSoundMode(RingerModeStatus.vibrate);
-        } catch (_) {}
-      }
+      await SoundMode.setSoundMode(RingerModeStatus.vibrate);
+      debugPrint('[SmartSilent] Ringer set to Vibrate via sound_mode');
+    } catch (e) {
+      debugPrint('[SmartSilent] Error setting vibrate via sound_mode: $e');
     }
   }
 
-  /// Restores Normal ringer mode and clears system DND if permitted.
+  /// Restores Normal ringer mode via sound_mode plugin, never the custom MethodChannel
   static Future<void> restoreNormalMode({bool onlyIfAppManaged = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -242,19 +255,13 @@ class SoundControlHelper {
       await prefs.setInt(_keyAppLastSetMs, DateTime.now().millisecondsSinceEpoch);
       await prefs.remove(_keyQuickEndAlarmId);
 
-      // 1. Native restore
-      try {
-        await _platformChannel.invokeMethod('setNativeRingerMode', {'mode': 'normal'});
-      } catch (_) {}
-
-      // 2. Fallback
+      // Restore Normal mode via sound_mode plugin
       try {
         await SoundMode.setSoundMode(RingerModeStatus.normal);
-      } catch (_) {}
-
-      try {
-        await _platformChannel.invokeMethod('clearDndIfAllowed');
-      } catch (_) {}
+        debugPrint('[SmartSilent] Ringer restored to Normal via sound_mode');
+      } catch (e) {
+        debugPrint('[SmartSilent] Error restoring normal via sound_mode: $e');
+      }
     } catch (_) {}
   }
 
@@ -263,8 +270,7 @@ class SoundControlHelper {
   // ---------------------------------------------------------------------------
 
   /// Records that the user intentionally took the device out of silent/vibrate
-  /// into Normal mode. Locks out automatic re-silencing until the current
-  /// active window interval finishes.
+  /// into Normal mode during an active schedule.
   static Future<void> notifyManualOverride() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -273,7 +279,7 @@ class SoundControlHelper {
       final int nowMs = DateTime.now().millisecondsSinceEpoch;
       final windows = await _loadActiveWindows(prefs);
 
-      int maxEndMs = nowMs + (30 * 60 * 1000); // 30 min default fallback
+      int maxEndMs = nowMs;
       for (final w in windows.values) {
         final int wEnd = (w['endMs'] as num?)?.toInt() ?? 0;
         if (wEnd > maxEndMs) maxEndMs = wEnd;
@@ -282,6 +288,7 @@ class SoundControlHelper {
       await prefs.setInt(_keyManualOverrideUntilMs, maxEndMs);
       await prefs.setInt(_keyManualOverrideMs, nowMs);
       await prefs.setBool(_keyAppManagedActive, false);
+      debugPrint('[SmartSilent] Manual override registered until $maxEndMs');
 
       final int? pendingQuickId = prefs.getInt(_keyQuickEndAlarmId);
       if (pendingQuickId != null) {
@@ -290,10 +297,6 @@ class SoundControlHelper {
         } catch (_) {}
         await prefs.remove(_keyQuickEndAlarmId);
       }
-
-      try {
-        await _platformChannel.invokeMethod('clearDndIfAllowed');
-      } catch (_) {}
     } catch (_) {}
   }
 
@@ -310,8 +313,8 @@ class SoundControlHelper {
       final int lastSetMs = prefs.getInt(_keyAppLastSetMs) ?? 0;
       final int nowMs = DateTime.now().millisecondsSinceEpoch;
 
-      // Ignore brief 3s transition period while sound mode settles
-      if (nowMs - lastSetMs < 3000) return false;
+      // Ignore brief 5s transition period while sound mode settles
+      if (nowMs - lastSetMs < 5000) return false;
 
       final current = await SoundMode.ringerModeStatus;
       if (current == RingerModeStatus.normal) {
@@ -333,6 +336,7 @@ class SoundControlHelper {
     DateTime? endTime,
     int? endAlarmId,
     String sourceId = 'quick_silent',
+    bool isResumeOrSync = false,
   }) async {
     final targetEnd = endTime ?? DateTime.now().add(const Duration(minutes: 30));
     await enterSilentWindow(
@@ -340,6 +344,7 @@ class SoundControlHelper {
       endTime: targetEnd,
       vibrate: vibrate,
       endAlarmId: endAlarmId,
+      isResumeOrSync: isResumeOrSync,
     );
   }
 

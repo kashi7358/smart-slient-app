@@ -11,25 +11,6 @@ import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/models/schedule_model.dart';
 import 'package:sound_mode/permission_handler.dart';
 
-// Public entry-points for AndroidAlarmManager forwarded to OneTimeAlarmHelper
-@pragma('vm:entry-point')
-void scheduleSilentCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
-}
-
-@pragma('vm:entry-point')
-void scheduleVibrateCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
-}
-
-@pragma('vm:entry-point')
-void scheduleNormalCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeEnd();
-}
-
 class CreateSchedule extends StatefulWidget {
   final ScheduleModel? scheduleToEdit;
   const CreateSchedule({super.key, this.scheduleToEdit});
@@ -184,8 +165,13 @@ class _CreateScheduleState extends State<CreateSchedule> {
   Future<void> _saveSchedule() async {
     final title = nameController.text.trim().isEmpty ? "One Time Schedule" : nameController.text.trim();
 
-    if (endDateTime.isBefore(startDateTime)) {
+    if (endDateTime.isBefore(startDateTime) || endDateTime.isAtSameMomentAs(startDateTime)) {
       Fluttertoast.showToast(msg: "End time must be after start time!");
+      return;
+    }
+
+    if (endDateTime.isBefore(DateTime.now())) {
+      Fluttertoast.showToast(msg: "Schedule end time cannot be in the past!");
       return;
     }
 

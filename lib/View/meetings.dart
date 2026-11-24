@@ -600,11 +600,13 @@ class _RepeatedState extends State<Repeated> {
   void _activateQuickDailySilent(int minutes, String label, CountProvider provider) async {
     final startTime = DateTime.now();
     final endTime = startTime.add(Duration(minutes: minutes));
-    final int alarmIdEnd = ((startTime.millisecondsSinceEpoch ~/ 1000) % 100000) + 1;
+    final int epochSeconds = startTime.millisecondsSinceEpoch ~/ 1000;
+    final int alarmIdStart = 40000 + (epochSeconds % 9000);
+    final int alarmIdEnd = alarmIdStart + 1000;
 
     try {
       await SoundControlHelper.enterSilentWindow(
-        sourceId: 'quick_meeting_silent',
+        sourceId: 'quick_silent',
         endTime: endTime,
         vibrate: false,
         endAlarmId: alarmIdEnd,
@@ -618,6 +620,8 @@ class _RepeatedState extends State<Repeated> {
         restoreNormalModeCallback,
         exact: true,
         wakeup: true,
+        allowWhileIdle: true,
+        rescheduleOnReboot: true,
       );
     } catch (_) {
       try {
@@ -627,22 +631,11 @@ class _RepeatedState extends State<Repeated> {
           restoreNormalModeCallback,
           exact: false,
           wakeup: true,
+          allowWhileIdle: true,
+          rescheduleOnReboot: true,
         );
       } catch (_) {}
     }
-
-    final quickSchedule = ScheduleModel(
-      name: 'Quick Silent ($label)',
-      Start: startTime,
-      End: endTime,
-      isSilentOrVibration: false,
-      isTaskActivated: true,
-      quickTime: minutes,
-    );
-
-    final box = Boxes.getData();
-    await box.add(quickSchedule);
-    provider.updateHasData(box.isNotEmpty);
 
     Fluttertoast.showToast(
       msg: 'Phone silenced for $label!',

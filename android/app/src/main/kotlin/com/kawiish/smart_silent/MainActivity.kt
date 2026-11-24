@@ -172,14 +172,9 @@ class MainActivity: FlutterActivity() {
                         try {
                             when (mode) {
                                 "silent" -> {
-                                    if (hasDnd) {
-                                        am.ringerMode = AudioManager.RINGER_MODE_SILENT
-                                        result.success("silent")
-                                    } else {
-                                        // Seamless fallback to Vibrate without throwing error or forcing DND UI
-                                        am.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                                        result.success("vibrate_fallback")
-                                    }
+                                    // Use Vibrate instead of Silent so DND is not triggered
+                                    am.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                                    result.success("vibrate")
                                 }
                                 "vibrate" -> {
                                     am.ringerMode = AudioManager.RINGER_MODE_VIBRATE

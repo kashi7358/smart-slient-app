@@ -10,18 +10,24 @@ import 'package:smart_silent/models/schedule_model.dart';
 @pragma('vm:entry-point')
 void oneTimeSilentStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
+  debugPrint('[SmartSilent] oneTimeSilentStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
 }
 
 @pragma('vm:entry-point')
 void oneTimeVibrateStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] oneTimeVibrateStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
 }
 
 @pragma('vm:entry-point')
 void oneTimeNormalEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] oneTimeNormalEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await OneTimeAlarmHelper.handleOneTimeEnd();
 }
 
@@ -29,18 +35,24 @@ void oneTimeNormalEndCallback() async {
 @pragma('vm:entry-point')
 void scheduleSilentCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
+  debugPrint('[SmartSilent] scheduleSilentCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
+  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
 }
 
 @pragma('vm:entry-point')
 void scheduleVibrateCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] scheduleVibrateCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
 }
 
 @pragma('vm:entry-point')
 void scheduleNormalCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] scheduleNormalCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await OneTimeAlarmHelper.handleOneTimeEnd();
 }
 
@@ -66,6 +78,7 @@ class OneTimeAlarmHelper {
         callback,
         exact: true,
         wakeup: true,
+        allowWhileIdle: true,
         rescheduleOnReboot: true,
       );
     } catch (_) {
@@ -76,6 +89,7 @@ class OneTimeAlarmHelper {
           callback,
           exact: false,
           wakeup: true,
+          allowWhileIdle: true,
           rescheduleOnReboot: true,
         );
       } catch (_) {}
@@ -90,13 +104,21 @@ class OneTimeAlarmHelper {
 
       final int nowMs = DateTime.now().millisecondsSinceEpoch;
       int targetEndMs = prefs.getInt('latest_active_onetime_end_ms') ?? 0;
+      bool targetVibrate = vibrate;
 
       // Find the end time of any currently active one-time schedule
       for (final key in prefs.getKeys()) {
         if (key.startsWith('onetime_') && key.endsWith('_end_ms')) {
           final int endVal = prefs.getInt(key) ?? 0;
-          if (endVal > nowMs && (targetEndMs <= nowMs || endVal > targetEndMs)) {
-            targetEndMs = endVal;
+          final prefix = key.substring(0, key.length - 7);
+          final int startVal = prefs.getInt('${prefix}_start_ms') ?? 0;
+          final bool isVib = prefs.getBool('${prefix}_vibrate') ?? false;
+
+          if (endVal > nowMs && (startVal <= nowMs + 120000)) {
+            if (endVal > targetEndMs) {
+              targetEndMs = endVal;
+              targetVibrate = isVib;
+            }
           }
         }
       }
@@ -110,7 +132,7 @@ class OneTimeAlarmHelper {
       await SoundControlHelper.enterSilentWindow(
         sourceId: 'one_time_schedule',
         endTime: targetEnd,
-        vibrate: vibrate,
+        vibrate: targetVibrate,
       );
     } catch (_) {}
   }
@@ -128,7 +150,7 @@ class OneTimeAlarmHelper {
       for (final key in prefs.getKeys()) {
         if (key.startsWith('onetime_') && key.endsWith('_end_ms')) {
           final int endVal = prefs.getInt(key) ?? 0;
-          if (endVal <= nowMs + 1000) {
+          if (endVal <= nowMs + 10000) {
             final prefix = key.substring(0, key.length - 7); // 'onetime_XYZ'
             keysToRemove.add(key);
             keysToRemove.add('${prefix}_start_ms');
@@ -141,7 +163,7 @@ class OneTimeAlarmHelper {
       }
 
       final latestEnd = prefs.getInt('latest_active_onetime_end_ms') ?? 0;
-      if (latestEnd <= nowMs + 1000) {
+      if (latestEnd <= nowMs + 10000) {
         await prefs.remove('latest_active_onetime_end_ms');
         await prefs.remove('latest_active_onetime_vibrate');
       }
@@ -152,16 +174,21 @@ class OneTimeAlarmHelper {
       // 2. Unconditionally restore Normal mode when one-time window ends
       await SoundControlHelper.restoreNormalMode(onlyIfAppManaged: false);
 
-      // 3. Mark any expired schedules as deactivated in Hive
+      // 3. Clean up expired one-time schedules from Hive
       try {
         if (Hive.isBoxOpen('schedules')) {
           final box = Boxes.getData();
           final now = DateTime.now();
+          final toDelete = <dynamic>[];
           for (var item in box.values) {
-            if (item.isTaskActivated && item.End.isBefore(now)) {
-              item.isTaskActivated = false;
-              await item.save();
+            if (item.quickTime > 0 ||
+                item.name.toLowerCase().contains('quick') ||
+                item.End.isBefore(now)) {
+              toDelete.add(item.key);
             }
+          }
+          for (var key in toDelete) {
+            await box.delete(key);
           }
         }
       } catch (_) {}
@@ -181,7 +208,18 @@ class OneTimeAlarmHelper {
     await prefs.setInt('latest_active_onetime_end_ms', item.End.millisecondsSinceEpoch);
     await prefs.setBool('latest_active_onetime_vibrate', item.isSilentOrVibration);
 
-    if (item.Start.isAfter(now)) {
+    // If start time is already reached or within the next 5 seconds, enter silent window immediately
+    if (item.Start.isBefore(now.add(const Duration(seconds: 5))) && item.End.isAfter(now)) {
+      try {
+        await SoundControlHelper.enterSilentWindow(
+          sourceId: 'one_time_schedule',
+          endTime: item.End,
+          vibrate: item.isSilentOrVibration,
+          endAlarmId: endAlarmId,
+          isResumeOrSync: true,
+        );
+      } catch (_) {}
+    } else if (item.Start.isAfter(now)) {
       await scheduleAlarmSafe(
         time: item.Start,
         alarmId: startAlarmId,
@@ -189,16 +227,7 @@ class OneTimeAlarmHelper {
             ? oneTimeVibrateStartCallback
             : oneTimeSilentStartCallback,
       );
-    } else if (item.End.isAfter(now)) {
-      // Currently within schedule: enter silent window immediately
-      try {
-        await SoundControlHelper.enterSilentWindow(
-          sourceId: 'one_time_schedule',
-          endTime: item.End,
-          vibrate: item.isSilentOrVibration,
-          endAlarmId: endAlarmId,
-        );
-      } catch (_) {}
+      debugPrint('[SmartSilent] verifyAlarmsOnAppLaunch re-armed one-time start (id: $startAlarmId, time: ${item.Start})');
     }
 
     if (item.End.isAfter(now)) {
@@ -207,6 +236,7 @@ class OneTimeAlarmHelper {
         alarmId: endAlarmId,
         callback: oneTimeNormalEndCallback,
       );
+      debugPrint('[SmartSilent] verifyAlarmsOnAppLaunch re-armed one-time end (id: $endAlarmId, time: ${item.End})');
     }
   }
 
@@ -239,18 +269,32 @@ class OneTimeAlarmHelper {
       if (box.isEmpty) return;
 
       final now = DateTime.now();
+      final toDelete = <dynamic>[];
 
       for (var item in box.values) {
-        if (!item.isTaskActivated) continue;
-
-        // If schedule has already expired in the past, deactivate it
-        if (item.End.isBefore(now)) {
-          item.isTaskActivated = false;
-          await item.save();
+        // Explicitly protect active schedules: if now is within [Start, End], NEVER delete
+        final bool isCurrentlyActive =
+            (now.isAfter(item.Start) || now.isAtSameMomentAs(item.Start)) && now.isBefore(item.End);
+        if (isCurrentlyActive) {
+          if (item.isTaskActivated) await scheduleOneTime(item);
           continue;
         }
 
+        // Purge legacy quick-silent items or schedules that expired in the past
+        if (item.quickTime > 0 ||
+            item.name.toLowerCase().contains('quick') ||
+            item.End.isBefore(now)) {
+          toDelete.add(item.key);
+          continue;
+        }
+
+        if (!item.isTaskActivated) continue;
+
         await scheduleOneTime(item);
+      }
+
+      for (var key in toDelete) {
+        await box.delete(key);
       }
     } catch (_) {}
   }

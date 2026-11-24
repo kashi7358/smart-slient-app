@@ -3,8 +3,6 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_silent/Utils/sound_control_helper.dart';
-import 'package:sound_mode/sound_mode.dart';
-import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 
 // Top-level VM entry-point callbacks for AndroidAlarmManager
 // Each callback sets the sound mode AND automatically schedules the next day's exact alarm
@@ -12,60 +10,80 @@ import 'package:sound_mode/utils/ringer_mode_statuses.dart';
 @pragma('vm:entry-point')
 void fajrStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] fajrStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerStart(1001, 'fajr', fajrStartCallback);
 }
 
 @pragma('vm:entry-point')
 void fajrEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] fajrEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerEnd(1002, 'fajr', fajrEndCallback);
 }
 
 @pragma('vm:entry-point')
 void zoharStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] zoharStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerStart(1003, 'zohar', zoharStartCallback);
 }
 
 @pragma('vm:entry-point')
 void zoharEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] zoharEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerEnd(1004, 'zohar', zoharEndCallback);
 }
 
 @pragma('vm:entry-point')
 void asarStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] asarStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerStart(1005, 'asar', asarStartCallback);
 }
 
 @pragma('vm:entry-point')
 void asarEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] asarEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerEnd(1006, 'asar', asarEndCallback);
 }
 
 @pragma('vm:entry-point')
 void magribStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] magribStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerStart(1007, 'magrib', magribStartCallback);
 }
 
 @pragma('vm:entry-point')
 void magribEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] magribEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerEnd(1008, 'magrib', magribEndCallback);
 }
 
 @pragma('vm:entry-point')
 void ishaStartCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] ishaStartCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerStart(1009, 'isha', ishaStartCallback);
 }
 
 @pragma('vm:entry-point')
 void ishaEndCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] ishaEndCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await PrayerAlarmHelper.handlePrayerEnd(1010, 'isha', ishaEndCallback);
 }
 
@@ -83,6 +101,7 @@ class PrayerAlarmHelper {
         callback,
         exact: true,
         wakeup: true,
+        allowWhileIdle: true,
         rescheduleOnReboot: true,
       );
     } catch (_) {
@@ -93,6 +112,7 @@ class PrayerAlarmHelper {
           callback,
           exact: false,
           wakeup: true,
+          allowWhileIdle: true,
           rescheduleOnReboot: true,
         );
       } catch (_) {}
@@ -270,6 +290,7 @@ class PrayerAlarmHelper {
             endTime: eTime,
             vibrate: isVibrateMode,
             endAlarmId: endId,
+            isResumeOrSync: true,
           );
           break;
         }

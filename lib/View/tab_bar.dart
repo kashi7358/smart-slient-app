@@ -13,7 +13,9 @@ import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/Utils/hijri_helper.dart';
+import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
 import 'package:smart_silent/Utils/nearby_masjid_service.dart';
+import 'package:smart_silent/Utils/one_time_alarm_helper.dart';
 import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
 import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_daily.dart';
@@ -34,14 +36,18 @@ import 'package:url_launcher/url_launcher.dart';
 @pragma('vm:entry-point')
 void activateDeviceSilentCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] activateDeviceSilentCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   try {
-    await SoundControlHelper.applySilentOrVibrate(vibrate: false);
+    await SoundControlHelper.applySilentOrVibrate(vibrate: true);
   } catch (_) {}
 }
 
 @pragma('vm:entry-point')
 void restoreNormalModeCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[SmartSilent] restoreNormalModeCallback fired');
+  await SoundControlHelper.ensureHiveInitialized();
   await SoundControlHelper.leaveSilentWindow(sourceId: 'quick_silent');
 }
 
@@ -106,7 +112,11 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     _prayerPageController = PageController(initialPage: _activePrayerDotIndex);
     _fetchLiveNearbyMosques();
     SoundControlHelper.syncManualOverrideState();
-    PrayerAlarmHelper.verifyAlarmsOnAppLaunch();
+    try {
+      PrayerAlarmHelper.verifyAlarmsOnAppLaunch();
+      MeetingAlarmHelper.verifyAlarmsOnAppLaunch();
+      OneTimeAlarmHelper.verifyAlarmsOnAppLaunch();
+    } catch (_) {}
 
     // Dynamically update nearest prayer slider every minute
     _prayerTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -126,6 +136,11 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       SoundControlHelper.syncManualOverrideState();
+      try {
+        PrayerAlarmHelper.verifyAlarmsOnAppLaunch();
+        MeetingAlarmHelper.verifyAlarmsOnAppLaunch();
+        OneTimeAlarmHelper.verifyAlarmsOnAppLaunch();
+      } catch (_) {}
       // Auto-retry when returning from Location / App Permission settings
       if (_mosques.isEmpty &&
           (_locationErrorType == 'location_disabled' ||
@@ -788,8 +803,9 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   Future<void> _activateQuickSilent(int minutes, String label) async {
     final start = DateTime.now();
     final end = start.add(Duration(minutes: minutes));
-    final int alarmIdStart = (start.millisecondsSinceEpoch ~/ 1000) % 100000;
-    final int alarmIdEnd = alarmIdStart + 1;
+    final int epochSeconds = start.millisecondsSinceEpoch ~/ 1000;
+    final int alarmIdStart = 40000 + (epochSeconds % 9000);
+    final int alarmIdEnd = alarmIdStart + 1000;
 
     try {
       // 1. Immediately silence the phone now & track active quick window
@@ -810,6 +826,8 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
           restoreNormalModeCallback,
           exact: true,
           wakeup: true,
+          allowWhileIdle: true,
+          rescheduleOnReboot: true,
         );
       } catch (_) {
         await AndroidAlarmManager.oneShotAt(
@@ -818,24 +836,9 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
           restoreNormalModeCallback,
           exact: false,
           wakeup: true,
+          allowWhileIdle: true,
+          rescheduleOnReboot: true,
         );
-      }
-
-      // 3. Save to database
-      final quickSchedule = ScheduleModel(
-        name: "Quick Silent ($label)",
-        Start: start,
-        End: end,
-        isSilentOrVibration: false,
-        isTaskActivated: true,
-        quickTime: minutes,
-      );
-
-      final box = Boxes.getData();
-      await box.add(quickSchedule);
-
-      if (mounted) {
-        Provider.of<CountProvider>(context, listen: false).updateHasData(true);
       }
 
       Fluttertoast.showToast(

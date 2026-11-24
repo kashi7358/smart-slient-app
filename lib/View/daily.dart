@@ -12,25 +12,6 @@ import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_schedule.dart';
 import 'package:smart_silent/models/schedule_model.dart';
 
-// Public entry-points for AndroidAlarmManager forwarded to OneTimeAlarmHelper
-@pragma('vm:entry-point')
-void scheduleSilentCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: false);
-}
-
-@pragma('vm:entry-point')
-void scheduleVibrateCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeStart(vibrate: true);
-}
-
-@pragma('vm:entry-point')
-void scheduleNormalCallback() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await OneTimeAlarmHelper.handleOneTimeEnd();
-}
-
 class OneTime extends StatefulWidget {
   const OneTime({super.key});
 
@@ -45,7 +26,33 @@ class _OneTimeState extends State<OneTime> {
   @override
   void initState() {
     super.initState();
+    _cleanupLegacyAndExpiredSchedules();
     _initBannerAd();
+  }
+
+  void _cleanupLegacyAndExpiredSchedules() {
+    try {
+      final box = Boxes.getData();
+      final now = DateTime.now();
+      final toDelete = <dynamic>[];
+      for (final item in box.values) {
+        // Explicitly protect active schedules: if now is within [Start, End], NEVER delete
+        final bool isCurrentlyActive =
+            (now.isAfter(item.Start) || now.isAtSameMomentAs(item.Start)) && now.isBefore(item.End);
+        if (isCurrentlyActive) continue;
+
+        // Never touch recurring schedules (stored separately in 'daily' box)
+        // Only clean up legacy quick-silent items or one-time schedules that ended in the past
+        if (item.quickTime > 0 ||
+            item.name.toLowerCase().contains('quick') ||
+            item.End.isBefore(now)) {
+          toDelete.add(item.key);
+        }
+      }
+      for (final key in toDelete) {
+        box.delete(key);
+      }
+    } catch (_) {}
   }
 
   void _initBannerAd() {
@@ -230,14 +237,22 @@ class _OneTimeState extends State<OneTime> {
               child: ValueListenableBuilder<Box<ScheduleModel>>(
                 valueListenable: Boxes.getData().listenable(),
                 builder: (context, box, _) {
-                  final schedules = box.values.toList().cast<ScheduleModel>();
+                  final now = DateTime.now();
+                  // Only display active or upcoming user-created schedules
+                  final schedules = box.values
+                      .where((item) =>
+                          item.quickTime == 0 &&
+                          !item.name.toLowerCase().contains('quick') &&
+                          item.End.isAfter(now))
+                      .toList()
+                      .cast<ScheduleModel>();
 
                   if (schedules.isEmpty) {
                     return _buildEmptyState();
                   }
 
-                  // Sort schedules by start time descending (newest first)
-                  schedules.sort((a, b) => b.Start.compareTo(a.Start));
+                  // Sort schedules by start time ascending (soonest first)
+                  schedules.sort((a, b) => a.Start.compareTo(b.Start));
 
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),

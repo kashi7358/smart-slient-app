@@ -75,6 +75,7 @@ class MeetingAlarmHelper {
         callback,
         exact: true,
         wakeup: true,
+        allowWhileIdle: true,
         rescheduleOnReboot: true,
       );
     } catch (_) {
@@ -85,6 +86,7 @@ class MeetingAlarmHelper {
           callback,
           exact: false,
           wakeup: true,
+          allowWhileIdle: true,
           rescheduleOnReboot: true,
         );
       } catch (_) {}
@@ -120,13 +122,18 @@ class MeetingAlarmHelper {
   // Callback executed when a meeting schedule starts
   static Future<void> onMeetingStart(int slot) async {
     WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('[SmartSilent] meetingStart$slot fired');
+    await SoundControlHelper.ensureHiveInitialized();
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       final enabled = prefs.getBool('meeting_${slot}_enabled') ?? false;
+      debugPrint('[SmartSilent] Meeting slot $slot enabled read: $enabled');
       if (!enabled) return;
 
       final now = DateTime.now();
       // Days of week: 0=Sun, 1=Mon, ..., 6=Sat
+      await prefs.reload();
       final daysString = prefs.getString('meeting_${slot}_days') ?? '0,1,2,3,4,5,6';
       final List<int> allowedDays = daysString
           .split(',')
@@ -138,6 +145,7 @@ class MeetingAlarmHelper {
       final bool isTodayAllowed = allowedDays.contains(currentDayOfWeek);
 
       if (isTodayAllowed) {
+        await prefs.reload();
         final isVibrate = prefs.getBool('meeting_${slot}_vibrate') ?? false;
         final endH = prefs.getInt('meeting_${slot}_end_h') ?? 10;
         final endM = prefs.getInt('meeting_${slot}_end_m') ?? 0;
@@ -155,6 +163,7 @@ class MeetingAlarmHelper {
       }
 
       // Automatically re-arm start alarm for tomorrow
+      await prefs.reload();
       final startH = prefs.getInt('meeting_${slot}_start_h') ?? 9;
       final startM = prefs.getInt('meeting_${slot}_start_m') ?? 0;
       final tomorrowStart = DateTime(now.year, now.month, now.day + 1, startH, startM);
@@ -171,12 +180,17 @@ class MeetingAlarmHelper {
   // Callback executed when a meeting schedule ends
   static Future<void> onMeetingEnd(int slot) async {
     WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('[SmartSilent] meetingEnd$slot fired');
+    await SoundControlHelper.ensureHiveInitialized();
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       final enabled = prefs.getBool('meeting_${slot}_enabled') ?? false;
+      debugPrint('[SmartSilent] Meeting slot $slot enabled read: $enabled');
       if (!enabled) return;
 
       final now = DateTime.now();
+      await prefs.reload();
       final daysString = prefs.getString('meeting_${slot}_days') ?? '0,1,2,3,4,5,6';
       final List<int> allowedDays = daysString
           .split(',')
@@ -192,6 +206,7 @@ class MeetingAlarmHelper {
       }
 
       // Automatically re-arm end alarm for tomorrow
+      await prefs.reload();
       final endH = prefs.getInt('meeting_${slot}_end_h') ?? 10;
       final endM = prefs.getInt('meeting_${slot}_end_m') ?? 0;
       final tomorrowEnd = DateTime(now.year, now.month, now.day + 1, endH, endM);
@@ -251,6 +266,7 @@ class MeetingAlarmHelper {
               startAlarmId,
               _startCallbacks[slot],
             );
+            debugPrint('[SmartSilent] verifyAlarmsOnAppLaunch re-armed meeting start (id: $startAlarmId, time: $targetStart)');
 
             // Schedule end alarm
             try {
@@ -261,6 +277,7 @@ class MeetingAlarmHelper {
               endAlarmId,
               _endCallbacks[slot],
             );
+            debugPrint('[SmartSilent] verifyAlarmsOnAppLaunch re-armed meeting end (id: $endAlarmId, time: $targetEnd)');
             continue;
           }
         }
