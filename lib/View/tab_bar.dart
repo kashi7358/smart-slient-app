@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
@@ -88,26 +89,11 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     {'name': 'Isha', 'time': '08:45 PM', 'next': 'Fajr', 'nextTime': '05:10 AM'},
   ];
 
-  // Dynamic Background Gradients matching each prayer's time-of-day
-  static const List<List<Color>> _prayerGradients = [
-    // 0: Fajr (Dawn / Subh Sadiq)
-    [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
-    // 1: Zohar (Midday / Oasis Cyan-Teal)
-    [Color(0xFF0284C7), Color(0xFF0D9488), Color(0xFF10B981)],
-    // 2: Asr (Late Afternoon / Golden Hour)
-    [Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)],
-    // 3: Maghrib (Sunset Dusk / Twilight Crimson-Purple)
-    [Color(0xFF581C87), Color(0xFF7E22CE), Color(0xFFBE185D)],
-    // 4: Isha (Midnight Celestial Night Sky)
-    [Color(0xFF0B132B), Color(0xFF1C2541), Color(0xFF3A506B)],
-  ];
-
-  static const List<Color> _prayerGradientsGlow = [
-    Color(0xFF2C5364),
-    Color(0xFF0D9488),
-    Color(0xFFD97706),
-    Color(0xFF7E22CE),
-    Color(0xFF1C2541),
+  // Unified brand purple gradient matching app logo across all prayer slides
+  static const List<Color> _prayerBannerGradient = [
+    AppColors.kPrimaryDark,
+    AppColors.kPrimary,
+    AppColors.kPrimaryLight,
   ];
 
   @override
@@ -141,7 +127,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   }
 
   void _initBannerAd() {
-    const String adUnitId = 'ca-app-pub-9923979057032791/3153557586';
+    final String adUnitId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
       adUnitId: adUnitId,
       size: AdSize.banner,
@@ -1596,14 +1582,14 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
       height: 146,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: _prayerGradients[safeIndex],
+        gradient: const LinearGradient(
+          colors: _prayerBannerGradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: _prayerGradientsGlow[safeIndex].withOpacity(0.38),
+            color: AppColors.kPrimary.withOpacity(0.35),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -1611,26 +1597,24 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
-        child: Stack(
-          children: [
-            // Mosque Silhouette Vector Outline & Sun/Moon dynamically per prayer
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _MosqueArtPainter(prayerIndex: _activePrayerDotIndex),
-              ),
-            ),
-
-            // Swipeable PageView for all 5 Prayers
-            PageView.builder(
-              controller: _prayerPageController,
-              itemCount: _prayers.length,
-              onPageChanged: (index) {
-                setState(() => _activePrayerDotIndex = index);
-              },
-              itemBuilder: (context, index) {
-                final prayer = _prayers[index];
-                final tag = prayerTags[index % prayerTags.length];
-                return Material(
+        child: PageView.builder(
+          controller: _prayerPageController,
+          itemCount: _prayers.length,
+          onPageChanged: (index) {
+            setState(() => _activePrayerDotIndex = index);
+          },
+          itemBuilder: (context, index) {
+            final prayer = _prayers[index];
+            final tag = prayerTags[index % prayerTags.length];
+            return Stack(
+              children: [
+                // Distinct architectural Mosque & Celestial artwork per prayer slide
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _MosqueArtPainter(prayerIndex: index),
+                  ),
+                ),
+                Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () async {
@@ -2633,17 +2617,15 @@ class _TopMintCurvePainter extends CustomPainter {
   final int prayerIndex;
   _TopMintCurvePainter({this.prayerIndex = 1});
 
-  static const List<List<Color>> _curveGradients = [
-    [Color(0xFFE2E8F0), Color(0xFFCBD5E1), Colors.white], // Fajr
-    [Color(0xFFE8FAF2), Color(0xFFC8F6E4), Colors.white], // Zohar
-    [Color(0xFFFEF3C7), Color(0xFFFDE68A), Colors.white], // Asr
-    [Color(0xFFF3E8FF), Color(0xFFE9D5FF), Colors.white], // Maghrib
-    [Color(0xFFE0E7FF), Color(0xFFC7D2FE), Colors.white], // Isha
+  static const List<Color> _curveColors = [
+    Color(0xFFE6DCF5),
+    Color(0xFFF1EBF9),
+    AppColors.kbg,
   ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    final colors = _curveGradients[prayerIndex.clamp(0, 4)];
+    final colors = _curveColors;
     final paint = Paint()
       ..shader = LinearGradient(
         colors: colors,
@@ -2667,8 +2649,7 @@ class _TopMintCurvePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TopMintCurvePainter oldDelegate) =>
-      oldDelegate.prayerIndex != prayerIndex;
+  bool shouldRepaint(covariant _TopMintCurvePainter oldDelegate) => false;
 }
 
 // Custom Painter for Mosque vector silhouette, Sun/Moon, and Stars inside Prayer banner card
@@ -2690,7 +2671,7 @@ class _MosqueArtPainter extends CustomPainter {
 
       final dawnGlow = Paint()
         ..shader = LinearGradient(
-          colors: [const Color(0xFF6DD5ED).withOpacity(0.22), Colors.transparent],
+          colors: [AppColors.kPrimaryGlow.withOpacity(0.24), Colors.transparent],
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
         ).createShader(Rect.fromLTWH(0, bottom - 60, size.width, 60));
@@ -2709,7 +2690,7 @@ class _MosqueArtPainter extends CustomPainter {
       // Asr: Warm golden afternoon sun descending on right
       final sunCenter = Offset(rightBase - 60, 48);
       final sunGlow = Paint()
-        ..color = const Color(0xFFF59E0B).withOpacity(0.4)
+        ..color = AppColors.kPrimaryGlow.withOpacity(0.4)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
       canvas.drawCircle(sunCenter, 34, sunGlow);
 
@@ -2719,7 +2700,7 @@ class _MosqueArtPainter extends CustomPainter {
       // Maghrib: Sunset dusk horizon glow and evening star
       final sunsetGlow = Paint()
         ..shader = LinearGradient(
-          colors: [const Color(0xFFF43F5E).withOpacity(0.35), Colors.transparent],
+          colors: [AppColors.kPrimaryGlow.withOpacity(0.3), Colors.transparent],
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
         ).createShader(Rect.fromLTWH(0, bottom - 65, size.width, 65));

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/repeated_model.dart';
 import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
@@ -44,7 +45,7 @@ class _CreateDailyState extends State<CreateDaily> {
   bool isAdLoaded = false;
 
   void initBannerAd() {
-    const adsId = 'ca-app-pub-9923979057032791/3153557586';
+    final adsId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
       size: AdSize.banner,
       adUnitId: adsId,
@@ -52,7 +53,9 @@ class _CreateDailyState extends State<CreateDaily> {
         onAdLoaded: (ad) {
           if (mounted) setState(() => isAdLoaded = true);
         },
-        onAdFailedToLoad: (ad, error) {},
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('[SmartSilent] CreateDaily BannerAd failed to load: $error');
+        },
       ),
       request: const AdRequest(),
     );

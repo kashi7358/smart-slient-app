@@ -4,6 +4,7 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
@@ -68,17 +69,21 @@ class _NemazState extends State<Nemaz> {
   int ishaAlarmId = Random().nextInt(0x7FFFFFFF);
 
   initBannerAd() {
-    var AdsIdd = 'ca-app-pub-9923979057032791/3153557586';
+    final adsId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
         size: AdSize.banner,
-        adUnitId: AdsIdd,
+        adUnitId: adsId,
         listener: BannerAdListener(
           onAdLoaded: (ad) {
-            setState(() {
-              isAdLoaded = true;
-            });
+            if (mounted) {
+              setState(() {
+                isAdLoaded = true;
+              });
+            }
           },
-          onAdFailedToLoad: (ad, error) {},
+          onAdFailedToLoad: (ad, error) {
+            debugPrint('[SmartSilent] Nemaz BannerAd failed to load: $error');
+          },
         ),
         request: AdRequest());
     _bannerAd.load();

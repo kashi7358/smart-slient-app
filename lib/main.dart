@@ -20,7 +20,9 @@ import 'package:sound_mode/permission_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  MobileAds.instance.initialize();
+  try {
+    await MobileAds.instance.initialize().timeout(const Duration(seconds: 3));
+  } catch (_) {}
   var directory = await getApplicationDocumentsDirectory();
   Hive.init(directory.path);
 

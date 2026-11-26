@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
@@ -72,7 +73,7 @@ class _CreateNemazState extends State<CreateNemaz> {
   }
 
   void initBannerAd() {
-    const adsId = 'ca-app-pub-9923979057032791/3153557586';
+    final adsId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
       size: AdSize.banner,
       adUnitId: adsId,
@@ -80,7 +81,9 @@ class _CreateNemazState extends State<CreateNemaz> {
         onAdLoaded: (ad) {
           if (mounted) setState(() => isAdLoaded = true);
         },
-        onAdFailedToLoad: (ad, error) {},
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('[SmartSilent] CreateNemaz BannerAd failed to load: $error');
+        },
       ),
       request: const AdRequest(),
     );
@@ -485,8 +488,8 @@ class _CreateNemazState extends State<CreateNemaz> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
         backgroundColor: AppColors.kbg,
@@ -740,40 +743,40 @@ class _CreateNemazState extends State<CreateNemaz> {
     );
   }
 
-  // Top Mosque Header graphic with enhanced artwork, centered title & date, and balanced action buttons
+  // Top Mosque Header graphic with luxury royal purple celestial skyline & balanced action buttons
   Widget _buildTopMosqueHeader(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 180,
+      height: 205,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFFEDE7F6),
-            Color(0xFFF3E8FF),
-            Color(0xFFF8F6FC),
+            AppColors.kPrimaryDark,
+            AppColors.kPrimary,
+            AppColors.kPrimaryLight,
           ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
-      child: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            // Enhanced Multi-Layered Mosque Silhouette & Celestial Vector Artwork
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _TopHeaderMosquePainter(),
-              ),
+      child: Stack(
+        children: [
+          // Multi-Layered Architectural Mosque Skyline & Celestial Artwork
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _TopHeaderMosquePainter(),
             ),
+          ),
 
-            // Top Bar: Back (Left), Title & Hijri Date (Center), Settings (Right)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          // Top Bar: Back (Left), Title & Hijri Date (Center), Settings (Right)
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Back Button (Sleek elevated circular button)
+                  // Back Button (Frosted glass circular button)
                   Material(
                     color: Colors.transparent,
                     shape: const CircleBorder(),
@@ -784,21 +787,14 @@ class _CreateNemazState extends State<CreateNemaz> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.92),
+                          color: Colors.white.withOpacity(0.16),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.85), width: 1.2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.kPrimary.withOpacity(0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          border: Border.all(color: Colors.white.withOpacity(0.28), width: 1),
                         ),
                         child: const Center(
                           child: Icon(
                             Icons.arrow_back_ios_new_rounded,
-                            color: AppColors.kPrimary,
+                            color: Colors.white,
                             size: 18,
                           ),
                         ),
@@ -814,26 +810,19 @@ class _CreateNemazState extends State<CreateNemaz> {
                         const Text(
                           'Prayer Timings',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 19,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.kPrimary,
-                            letterSpacing: -0.3,
+                            color: Colors.white,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 5),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.92),
+                            color: Colors.white.withOpacity(0.16),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
+                            border: Border.all(color: Colors.white.withOpacity(0.24)),
                           ),
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
@@ -842,7 +831,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                               children: [
                                 const Icon(
                                   Icons.calendar_month_rounded,
-                                  color: AppColors.kPrimary,
+                                  color: Colors.white,
                                   size: 13,
                                 ),
                                 const SizedBox(width: 5),
@@ -850,8 +839,8 @@ class _CreateNemazState extends State<CreateNemaz> {
                                   hijriDateText,
                                   style: const TextStyle(
                                     fontSize: 11.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F766E),
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
                                     letterSpacing: 0.1,
                                   ),
                                 ),
@@ -863,7 +852,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                     ),
                   ),
 
-                  // Settings Button on Top Right (Matching elevated circular gear button)
+                  // Settings Button on Top Right (Frosted glass circular gear button)
                   Material(
                     color: Colors.transparent,
                     shape: const CircleBorder(),
@@ -879,21 +868,14 @@ class _CreateNemazState extends State<CreateNemaz> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.92),
+                          color: Colors.white.withOpacity(0.16),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withOpacity(0.85), width: 1.2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.kPrimary.withOpacity(0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          border: Border.all(color: Colors.white.withOpacity(0.28), width: 1),
                         ),
                         child: const Center(
                           child: Icon(
                             Icons.settings_rounded,
-                            color: AppColors.kPrimary,
+                            color: Colors.white,
                             size: 20,
                           ),
                         ),
@@ -903,8 +885,8 @@ class _CreateNemazState extends State<CreateNemaz> {
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1106,141 +1088,135 @@ class _CreateNemazState extends State<CreateNemaz> {
   }
 }
 
-// Enhanced Multi-Layered Custom Painter for Top Mosque Skyline, Moon, Stars & Waves
+// Professional Multi-Layered Custom Painter for Royal Purple Mosque Skyline & Celestial Sky
 class _TopHeaderMosquePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final bottom = size.height;
     final centerX = size.width * 0.50;
 
-    // 1. Soft atmospheric clouds in the sky
-    final cloudPaint = Paint()
-      ..color = Colors.white.withOpacity(0.45)
-      ..style = PaintingStyle.fill;
-
-    _drawCloud(canvas, Offset(size.width * 0.22, 28), 24, cloudPaint);
-    _drawCloud(canvas, Offset(size.width * 0.78, 22), 20, cloudPaint);
-    _drawCloud(canvas, Offset(size.width * 0.88, 38), 16, cloudPaint);
-
-    // 2. Luminous Crescent Moon & Star in Upper Right
-    final moonCenter = Offset(size.width * 0.68, 32);
+    // 1. Subtle Celestial Glow & Twinkling Stars (anchored cleanly away from center title)
+    final moonCenter = Offset(size.width * 0.84, bottom - 118);
     final moonGlow = Paint()
-      ..color = const Color(0xFFFBBF24).withOpacity(0.22)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-    canvas.drawCircle(moonCenter, 16, moonGlow);
+      ..color = Colors.white.withOpacity(0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+    canvas.drawCircle(moonCenter, 20, moonGlow);
 
     final moonPaint = Paint()
-      ..color = AppColors.kPrimary.withOpacity(0.55)
+      ..color = Colors.white.withOpacity(0.85)
       ..style = PaintingStyle.fill;
 
     final moonPath = Path()
-      ..addArc(Rect.fromCircle(center: moonCenter, radius: 10), -math.pi * 0.5, math.pi * 1.5)
+      ..addArc(Rect.fromCircle(center: moonCenter, radius: 9), -math.pi * 0.5, math.pi * 1.5)
       ..arcToPoint(
-        Offset(moonCenter.dx, moonCenter.dy - 10),
-        radius: const Radius.circular(7.8),
+        Offset(moonCenter.dx, moonCenter.dy - 9),
+        radius: const Radius.circular(7.0),
         clockwise: false,
       );
     canvas.drawPath(moonPath, moonPaint);
 
-    // Morning star beside the moon
-    _drawStar(canvas, Offset(size.width * 0.73, 26), 4.5, AppColors.kPrimary.withOpacity(0.55));
-    _drawStar(canvas, Offset(size.width * 0.35, 34), 3.5, AppColors.kPrimary.withOpacity(0.35));
+    // Delicate 4-point stars across upper sky
+    _drawStar(canvas, Offset(size.width * 0.14, bottom - 112), 4.0, Colors.white.withOpacity(0.55));
+    _drawStar(canvas, Offset(size.width * 0.24, bottom - 92), 2.5, Colors.white.withOpacity(0.40));
+    _drawStar(canvas, Offset(size.width * 0.74, bottom - 122), 3.0, Colors.white.withOpacity(0.45));
+    _drawStar(canvas, Offset(size.width * 0.90, bottom - 92), 3.2, Colors.white.withOpacity(0.50));
 
-    // 3. Layer 1: Distant Background Mosque Silhouettes (Pale Cyan)
+    // 2. Layer 1: Distant Background Mosque Silhouettes (Soft Atmospheric Depth)
     final distantPaint = Paint()
-      ..color = AppColors.kPrimary.withOpacity(0.12)
+      ..color = Colors.white.withOpacity(0.08)
       ..style = PaintingStyle.fill;
 
-    _drawMinaret(canvas, centerX - 148, 85, 8, bottom, distantPaint);
-    _drawMinaret(canvas, centerX + 140, 85, 8, bottom, distantPaint);
-    _drawDome(canvas, centerX - 110, bottom - 18, 42, 44, distantPaint);
-    _drawDome(canvas, centerX + 110, bottom - 18, 42, 44, distantPaint);
+    _drawMinaret(canvas, centerX - 156, 72, 7.5, bottom, distantPaint);
+    _drawMinaret(canvas, centerX + 148, 72, 7.5, bottom, distantPaint);
+    _drawDome(canvas, centerX - 116, bottom - 18, 42, 42, distantPaint);
+    _drawDome(canvas, centerX + 116, bottom - 18, 42, 42, distantPaint);
 
-    // 4. Layer 2: Midground Mosque Elements (Medium Cyan)
+    // 3. Layer 2: Midground Mosque Elements
     final midPaint = Paint()
-      ..color = AppColors.kPrimary.withOpacity(0.22)
+      ..color = Colors.white.withOpacity(0.14)
       ..style = PaintingStyle.fill;
 
-    _drawMinaret(canvas, centerX - 118, 102, 9.5, bottom, midPaint);
-    _drawMinaret(canvas, centerX + 108, 102, 9.5, bottom, midPaint);
-    _drawDome(canvas, centerX - 62, bottom - 22, 54, 56, midPaint);
-    _drawDome(canvas, centerX + 62, bottom - 22, 54, 56, midPaint);
+    _drawMinaret(canvas, centerX - 122, 88, 9, bottom, midPaint);
+    _drawMinaret(canvas, centerX + 113, 88, 9, bottom, midPaint);
+    _drawDome(canvas, centerX - 58, bottom - 22, 50, 50, midPaint);
+    _drawDome(canvas, centerX + 58, bottom - 22, 50, 50, midPaint);
 
-    // 5. Layer 3: Foreground Grand Central Mosque (Rich Cyan with Details)
+    // 4. Layer 3: Foreground Grand Central Mosque
     final fgPaint = Paint()
-      ..color = AppColors.kPrimary.withOpacity(0.36)
+      ..color = Colors.white.withOpacity(0.22)
       ..style = PaintingStyle.fill;
 
     // Central Grand Dome
-    _drawDome(canvas, centerX, bottom - 24, 94, 96, fgPaint);
+    _drawDome(canvas, centerX, bottom - 24, 86, 84, fgPaint);
+
+    // Subtle crisp architectural outline on central dome
+    final domeStroke = Paint()
+      ..color = Colors.white.withOpacity(0.32)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(centerX, bottom - 24), width: 86, height: 84),
+      math.pi,
+      math.pi,
+      false,
+      domeStroke,
+    );
 
     // Crescent finial on central dome
     final finialPaint = Paint()
-      ..color = AppColors.kPrimary.withOpacity(0.55)
-      ..strokeWidth = 2
+      ..color = Colors.white.withOpacity(0.65)
+      ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(centerX, bottom - 72), Offset(centerX, bottom - 98), finialPaint);
-    canvas.drawCircle(Offset(centerX, bottom - 100), 3.5, fgPaint);
+    canvas.drawLine(Offset(centerX, bottom - 66), Offset(centerX, bottom - 84), finialPaint);
+    canvas.drawCircle(Offset(centerX, bottom - 86), 2.8, Paint()..color = Colors.white.withOpacity(0.75));
 
     // Foreground Primary Twin Minarets
-    _drawDetailedMinaret(canvas, centerX - 82, 120, 12, bottom, fgPaint);
-    _drawDetailedMinaret(canvas, centerX + 70, 120, 12, bottom, fgPaint);
+    _drawDetailedMinaret(canvas, centerX - 78, 102, 11, bottom, fgPaint);
+    _drawDetailedMinaret(canvas, centerX + 67, 102, 11, bottom, fgPaint);
 
     // Grand Arched Facade Wall across bottom
-    final wallHeight = 26.0;
-    canvas.drawRect(Rect.fromLTWH(centerX - 130, bottom - wallHeight, 260, wallHeight), fgPaint);
+    const wallHeight = 24.0;
+    canvas.drawRect(Rect.fromLTWH(centerX - 134, bottom - wallHeight, 268, wallHeight), fgPaint);
 
-    // Moorish Arches on wall facade
+    // Symmetrical Moorish Arches along the facade
     final archCutPaint = Paint()
-      ..color = const Color(0xFFE4F5FC).withOpacity(0.7)
+      ..color = AppColors.kPrimaryDark.withOpacity(0.35)
       ..style = PaintingStyle.fill;
     for (int i = 0; i < 9; i++) {
-      final archX = centerX - 110 + (i * 24.0);
+      final archX = centerX - 109 + (i * 25.0);
       final archPath = Path()
         ..moveTo(archX, bottom)
-        ..lineTo(archX, bottom - 14)
-        ..arcToPoint(Offset(archX + 10, bottom - 14), radius: const Radius.circular(5))
-        ..lineTo(archX + 10, bottom)
+        ..lineTo(archX, bottom - 13)
+        ..arcToPoint(Offset(archX + 9, bottom - 13), radius: const Radius.circular(4.5))
+        ..lineTo(archX + 9, bottom)
         ..close();
       canvas.drawPath(archPath, archCutPaint);
     }
 
-    // 6. Sweeping Organic Cyan/Mint Waves at Header Bottom
-    final wave1 = Paint()
-      ..color = const Color(0xFF0EA5E9).withOpacity(0.30)
+    // 5. Seamless Organic Bottom Wave Transition into AppColors.kbg
+    final softWave = Paint()
+      ..color = Colors.white.withOpacity(0.18)
       ..style = PaintingStyle.fill;
 
-    final pathWave1 = Path()
-      ..moveTo(0, bottom - 26)
-      ..cubicTo(size.width * 0.28, bottom - 46, size.width * 0.62, bottom - 12, size.width, bottom - 22)
+    final pathSoftWave = Path()
+      ..moveTo(0, bottom - 20)
+      ..cubicTo(size.width * 0.30, bottom - 34, size.width * 0.68, bottom - 6, size.width, bottom - 18)
       ..lineTo(size.width, bottom)
       ..lineTo(0, bottom)
       ..close();
-    canvas.drawPath(pathWave1, wave1);
+    canvas.drawPath(pathSoftWave, softWave);
 
-    final wave2 = Paint()
-      ..color = const Color(0xFF38BDF8).withOpacity(0.38)
+    final baseBgWave = Paint()
+      ..color = AppColors.kbg
       ..style = PaintingStyle.fill;
 
-    final pathWave2 = Path()
-      ..moveTo(0, bottom - 18)
-      ..cubicTo(size.width * 0.35, bottom - 32, size.width * 0.72, bottom - 4, size.width, bottom - 14)
+    final pathBaseWave = Path()
+      ..moveTo(0, bottom - 12)
+      ..cubicTo(size.width * 0.36, bottom - 22, size.width * 0.72, bottom, size.width, bottom - 10)
       ..lineTo(size.width, bottom)
       ..lineTo(0, bottom)
       ..close();
-    canvas.drawPath(pathWave2, wave2);
-
-    final wave3 = Paint()
-      ..color = const Color(0xFFF3F7FA)
-      ..style = PaintingStyle.fill;
-
-    final pathWave3 = Path()
-      ..moveTo(0, bottom - 10)
-      ..cubicTo(size.width * 0.38, bottom - 20, size.width * 0.75, bottom, size.width, bottom - 6)
-      ..lineTo(size.width, bottom)
-      ..lineTo(0, bottom)
-      ..close();
-    canvas.drawPath(pathWave3, wave3);
+    canvas.drawPath(pathBaseWave, baseBgWave);
   }
 
   void _drawDome(Canvas canvas, double cx, double cy, double w, double h, Paint paint) {
@@ -1295,12 +1271,6 @@ class _TopHeaderMosquePainter extends CustomPainter {
 
     // Spire finial
     canvas.drawCircle(Offset(x + width / 2, bottom - totalH - 2), 2.2, paint);
-  }
-
-  void _drawCloud(Canvas canvas, Offset center, double radius, Paint paint) {
-    canvas.drawCircle(center, radius, paint);
-    canvas.drawCircle(Offset(center.dx - radius * 0.7, center.dy + radius * 0.25), radius * 0.65, paint);
-    canvas.drawCircle(Offset(center.dx + radius * 0.75, center.dy + radius * 0.2), radius * 0.7, paint);
   }
 
   void _drawStar(Canvas canvas, Offset center, double r, Color color) {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:smart_silent/constants.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -57,7 +58,7 @@ class _OneTimeState extends State<OneTime> {
   }
 
   void _initBannerAd() {
-    const String adUnitId = 'ca-app-pub-9923979057032791/3153557586';
+    final String adUnitId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
       size: AdSize.banner,
       adUnitId: adUnitId,
@@ -66,7 +67,10 @@ class _OneTimeState extends State<OneTime> {
           if (mounted) setState(() => _isAdLoaded = true);
         },
         onAdFailedToLoad: (ad, error) {
+          debugPrint('[SmartSilent] OneTime BannerAd failed to load: $error');
           ad.dispose();
+          _bannerAd = null;
+          if (mounted) setState(() => _isAdLoaded = false);
         },
       ),
       request: const AdRequest(),

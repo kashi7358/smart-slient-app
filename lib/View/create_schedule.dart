@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/Utils/ad_helper.dart';
 import 'package:smart_silent/constants.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
@@ -30,7 +31,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
   bool isAdLoaded = false;
 
   void initBannerAd() {
-    const adsId = 'ca-app-pub-9923979057032791/3153557586';
+    final adsId = AdHelper.bannerAdUnitId;
     _bannerAd = BannerAd(
       size: AdSize.banner,
       adUnitId: adsId,
@@ -39,7 +40,10 @@ class _CreateScheduleState extends State<CreateSchedule> {
           if (mounted) setState(() => isAdLoaded = true);
         },
         onAdFailedToLoad: (ad, error) {
+          debugPrint('[SmartSilent] CreateSchedule BannerAd failed to load: $error');
           ad.dispose();
+          _bannerAd = null;
+          if (mounted) setState(() => isAdLoaded = false);
         },
       ),
       request: const AdRequest(),
