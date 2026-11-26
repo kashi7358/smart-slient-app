@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smart_silent/constants.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -12,7 +13,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         statusBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -39,14 +40,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
+                  colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0284C7).withOpacity(0.28),
+                    color: AppColors.kPrimary.withOpacity(0.28),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -99,7 +100,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             // Policy Sections
             _buildSectionCard(
               icon: Icons.storage_rounded,
-              iconColor: const Color(0xFF0284C7),
+              iconColor: AppColors.kPrimary,
               title: '1. Local Offline Storage',
               content:
                   'All your prayer schedules, meeting preferences, and time configurations are stored strictly on your local device storage using Hive database. No schedule data is ever sent to or stored on external cloud servers.',

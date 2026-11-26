@@ -9,6 +9,7 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
+import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/Utils/sound_control_helper.dart';
 import 'package:smart_silent/View/create_nemaz.dart';
 import 'package:smart_silent/models/nemaz_model.dart';
@@ -873,13 +874,15 @@ class _NemazState extends State<Nemaz> {
         },
       ),
       bottomNavigationBar: isAdLoaded
-          ? Container(
-              decoration: BoxDecoration(color: Colors.transparent),
-              height: _bannerAd.size.height.toDouble(),
-              width: _bannerAd.size.width.toDouble(),
-              child: AdWidget(ad: _bannerAd),
+          ? SafeArea(
+              child: Container(
+                decoration: const BoxDecoration(color: Colors.transparent),
+                height: _bannerAd.size.height.toDouble(),
+                width: _bannerAd.size.width.toDouble(),
+                child: AdWidget(ad: _bannerAd),
+              ),
             )
-          : SizedBox(),
+          : null,
     );
   }
 
@@ -1058,7 +1061,7 @@ class _NemazState extends State<Nemaz> {
   // }
 
   Future<void> openDoNotDisturbSettings() async {
-    await PermissionHandler.openDoNotDisturbSetting();
+    await DeviceCompatibilityHelper.openDndSettings();
   }
 
   @pragma('vm:entry-point')

@@ -6,9 +6,11 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/Utils/device_compatibility_helper.dart';
@@ -65,6 +67,10 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   late final PageController _prayerPageController;
   Timer? _prayerTimer;
 
+  // AdMob Banner Ad configuration
+  BannerAd? _bannerAd;
+  bool _isAdLoaded = false;
+
   bool _isLoadingMosques = false;
   int _mosqueFetchGeneration = 0;
   String _locationStatusMessage = '';
@@ -108,6 +114,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initBannerAd();
     _calculateDynamicOfflinePrayerTimes();
     _prayerPageController = PageController(initialPage: _activePrayerDotIndex);
     _fetchLiveNearbyMosques();
@@ -129,7 +136,38 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _prayerTimer?.cancel();
     _prayerPageController.dispose();
+    _bannerAd?.dispose();
     super.dispose();
+  }
+
+  void _initBannerAd() {
+    const String adUnitId = 'ca-app-pub-9923979057032791/3153557586';
+    _bannerAd = BannerAd(
+      adUnitId: adUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          debugPrint('[SmartSilent] Home Tab BannerAd loaded successfully.');
+          if (mounted) {
+            setState(() {
+              _isAdLoaded = true;
+            });
+          }
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('[SmartSilent] Home Tab BannerAd failed to load: $error');
+          ad.dispose();
+          _bannerAd = null;
+          if (mounted) {
+            setState(() {
+              _isAdLoaded = false;
+            });
+          }
+        },
+      ),
+    );
+    _bannerAd?.load();
   }
 
   @override
@@ -845,14 +883,14 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
         msg: "Phone silenced for $label!",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
-        backgroundColor: const Color(0xFF389EB4),
+        backgroundColor: AppColors.kPrimary,
         textColor: Colors.white,
       );
     } catch (_) {
       Fluttertoast.showToast(
         msg: "Phone silenced for $label",
         toastLength: Toast.LENGTH_SHORT,
-        backgroundColor: const Color(0xFF389EB4),
+        backgroundColor: AppColors.kPrimary,
         textColor: Colors.white,
       );
     }
@@ -913,16 +951,16 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF389EB4).withOpacity(0.08),
+                        color: AppColors.kSecondary,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF389EB4).withOpacity(0.25)),
+                        border: Border.all(color: AppColors.kPrimary.withOpacity(0.25)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: const [
-                              Icon(Icons.timer_outlined, size: 18, color: Color(0xFF389EB4)),
+                              Icon(Icons.timer_outlined, size: 18, color: AppColors.kPrimary),
                               SizedBox(width: 6),
                               Text(
                                 'Quick Silent Timer',
@@ -944,7 +982,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                     setSheetState(() => customMinutes -= 5);
                                   }
                                 },
-                                icon: const Icon(Icons.remove_circle, color: Color(0xFF389EB4), size: 36),
+                                icon: const Icon(Icons.remove_circle, color: AppColors.kPrimary, size: 36),
                               ),
                               Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -976,7 +1014,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                     setSheetState(() => customMinutes += 5);
                                   }
                                 },
-                                icon: const Icon(Icons.add_circle, color: Color(0xFF389EB4), size: 36),
+                                icon: const Icon(Icons.add_circle, color: AppColors.kPrimary, size: 36),
                               ),
                             ],
                           ),
@@ -999,7 +1037,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF389EB4),
+                                backgroundColor: AppColors.kPrimary,
                                 elevation: 2,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -1092,10 +1130,10 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF389EB4).withOpacity(0.12),
+                color: AppColors.kSecondary,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: const Color(0xFF389EB4), size: 24),
+              child: Icon(icon, color: AppColors.kPrimary, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1158,7 +1196,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
       ),
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         drawer: _buildDrawer(context),
         body: Stack(
           children: [
@@ -1228,20 +1266,20 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF389EB4).withOpacity(0.12),
+                                color: AppColors.kSecondary,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.calendar_month_rounded, size: 11, color: Color(0xFF0F766E)),
+                                  const Icon(Icons.calendar_month_rounded, size: 11, color: AppColors.kPrimary),
                                   const SizedBox(width: 4),
                                   Text(
                                     HijriDate.formatCurrentDate(),
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF0F766E),
+                                      color: AppColors.kPrimary,
                                     ),
                                   ),
                                 ],
@@ -1289,13 +1327,13 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                   // Main Scrollable Body (Pull down to refresh nearby masjids)
                   Expanded(
                     child: RefreshIndicator(
-                      color: const Color(0xFF389EB4),
+                      color: AppColors.kPrimary,
                       onRefresh: () => _fetchLiveNearbyMosques(forceFresh: true),
                       child: SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        padding: const EdgeInsets.only(bottom: 165), // Space for bottom Quick Silent bar & raised FAB
+                        padding: EdgeInsets.only(bottom: _isAdLoaded ? 230 : 175), // Space for bottom Quick Silent bar, banner ad & raised FAB
                         child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1422,8 +1460,8 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
                                             colors: [
-                                              const Color(0xFF389EB4).withOpacity(0.16),
-                                              const Color(0xFF0F766E).withOpacity(0.10),
+                                              AppColors.kSecondary,
+                                              AppColors.kPrimary.withOpacity(0.12),
                                             ],
                                             begin: Alignment.topLeft,
                                             end: Alignment.bottomRight,
@@ -1434,7 +1472,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                           _locationErrorType == 'location_disabled'
                                               ? Icons.location_off_rounded
                                               : Icons.mosque_rounded,
-                                          color: const Color(0xFF0F766E),
+                                          color: AppColors.kPrimary,
                                           size: 22,
                                         ),
                                       ),
@@ -1476,7 +1514,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                                 child: Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFF389EB4).withOpacity(0.12),
+                                                    color: AppColors.kSecondary,
                                                     borderRadius: BorderRadius.circular(8),
                                                   ),
                                                   child: const Text(
@@ -1484,7 +1522,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                                                     style: TextStyle(
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.w700,
-                                                      color: Color(0xFF389EB4),
+                                                      color: AppColors.kPrimary,
                                                     ),
                                                   ),
                                                 ),
@@ -1737,7 +1775,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? const Color(0xFF389EB4).withOpacity(0.6) : Colors.transparent,
+            color: isSelected ? AppColors.kPrimary : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: const [
@@ -1849,7 +1887,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.2,
-                              color: Color(0xFF389EB4),
+                              color: AppColors.kPrimary,
                             ),
                           ),
                         )
@@ -2011,7 +2049,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Icon(Icons.location_on_rounded, size: 12, color: Color(0xFF389EB4)),
+                            const Icon(Icons.location_on_rounded, size: 12, color: AppColors.kPrimary),
                             const SizedBox(width: 3),
                             Expanded(
                               child: Text(
@@ -2049,7 +2087,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF389EB4).withOpacity(0.11),
+                            color: AppColors.kSecondary,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -2080,32 +2118,70 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     );
   }
 
-  // Bottom Quick Silent Bar + Raised Floating Action Button (+)
+  // Bottom Quick Silent Bar + Raised Floating Action Button (+) with Banner Ad & Zero Overflow
   Widget _buildBottomQuickSilentWithFab() {
-    return SizedBox(
-      height: 172,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.bottomCenter,
-        children: [
-          // 1. Bottom Rounded Sheet pinned to bottom: 0
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x18000000),
-                    blurRadius: 18,
-                    offset: Offset(0, -4),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // 1. Floating Action Button (+) raised smoothly above Quick Silent card
+        Padding(
+          padding: const EdgeInsets.only(right: 20, bottom: 12),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: _openCreateBottomSheet,
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.kPrimary.withOpacity(0.38),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.add,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
               ),
+            ),
+          ),
+        ),
+
+        // 2. Bottom Rounded Sheet with SafeArea to prevent OS navigation bar overflow
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.kPrimary.withOpacity(0.08),
+                blurRadius: 18,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2114,62 +2190,37 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
+                      color: Color(0xFF1E1B2E),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _buildQuickSilentPill(label: '5 Min', minutes: 5),
+                      const SizedBox(width: 8),
                       _buildQuickSilentPill(label: '10 Min', minutes: 10),
+                      const SizedBox(width: 8),
                       _buildQuickSilentPill(label: '1 Hour', minutes: 60),
+                      const SizedBox(width: 8),
                       _buildQuickSilentPill(label: '2 Hour', minutes: 120),
                     ],
                   ),
+                  // AdMob Banner Ad (ca-app-pub-9923979057032791/3153557586)
+                  if (_isAdLoaded && _bannerAd != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      alignment: Alignment.center,
+                      width: _bannerAd!.size.width.toDouble(),
+                      height: _bannerAd!.size.height.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-
-          // 2. Floating Action Button (+) raised comfortably ABOVE Quick Silent card
-          Positioned(
-            bottom: 104,
-            right: 22,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: _openCreateBottomSheet,
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF389EB4),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF389EB4).withOpacity(0.42),
-                        blurRadius: 12,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -2178,27 +2229,37 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () => _activateQuickSilent(minutes, label),
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          height: 36,
+          height: 38,
           decoration: BoxDecoration(
-            color: const Color(0xFF389EB4),
+            gradient: const LinearGradient(
+              colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF389EB4).withOpacity(0.28),
+                color: AppColors.kPrimary.withOpacity(0.28),
                 blurRadius: 6,
                 offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Center(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                letterSpacing: 0.2,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    letterSpacing: 0.2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -2222,7 +2283,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(20, 48, 20, 22),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
+                colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -2343,8 +2404,8 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                 // Prayer Timings
                 _buildDrawerItem(
                   icon: Icons.mosque_rounded,
-                  iconColor: const Color(0xFF0284C7),
-                  iconBgColor: const Color(0xFFE0F2FE),
+                  iconColor: AppColors.kPrimary,
+                  iconBgColor: AppColors.kSecondary,
                   title: 'Prayer Timings',
                   subtitle: 'Set auto-silent times for prayers',
                   onTap: () async {
@@ -2360,8 +2421,8 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                 // Meeting Schedules
                 _buildDrawerItem(
                   icon: Icons.business_center_rounded,
-                  iconColor: const Color(0xFF389EB4),
-                  iconBgColor: const Color(0xFFE0F7FA),
+                  iconColor: AppColors.kPrimaryLight,
+                  iconBgColor: AppColors.kSecondary,
                   title: 'Meeting Schedules',
                   subtitle: 'Daily & repeated silent tasks',
                   onTap: () {
@@ -2376,8 +2437,8 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                 // Settings
                 _buildDrawerItem(
                   icon: Icons.settings_rounded,
-                  iconColor: const Color(0xFF0D9488),
-                  iconBgColor: const Color(0xFFCCFBF1),
+                  iconColor: AppColors.kPrimary,
+                  iconBgColor: AppColors.kSecondary,
                   title: 'Settings',
                   subtitle: 'DND permissions & app data',
                   onTap: () {

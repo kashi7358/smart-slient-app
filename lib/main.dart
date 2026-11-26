@@ -12,6 +12,7 @@ import 'package:smart_silent/Utils/one_time_alarm_helper.dart';
 import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
 import 'package:smart_silent/View/on_bording.dart';
 import 'package:smart_silent/View/tab_bar.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/nemaz_model.dart';
 import 'package:smart_silent/models/repeated_model.dart';
 import 'package:smart_silent/models/schedule_model.dart';
@@ -118,7 +119,14 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Smart Silent',
         theme: ThemeData(
-          primarySwatch: Colors.purple,
+          primaryColor: AppColors.kPrimary,
+          scaffoldBackgroundColor: AppColors.kbg,
+          colorScheme: ColorScheme.fromSwatch(
+            primarySwatch: Colors.deepPurple,
+          ).copyWith(
+            primary: AppColors.kPrimary,
+            secondary: AppColors.kPrimaryLight,
+          ),
         ),
         home: shouldShowHome ? const TabBarDemo() : const OnBordingScreen(),
         debugShowCheckedModeBanner: false,

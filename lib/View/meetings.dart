@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
@@ -80,7 +81,7 @@ class _RepeatedState extends State<Repeated> {
     final provider = Provider.of<CountProvider>(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.kbg,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,
@@ -108,7 +109,7 @@ class _RepeatedState extends State<Repeated> {
 
                 return ListView.builder(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 10, bottom: 205),
+                  padding: const EdgeInsets.only(top: 10, bottom: 240),
                   itemCount: data.length,
                   itemBuilder: (context, index) {
                     final item = data[index];
@@ -123,14 +124,14 @@ class _RepeatedState extends State<Repeated> {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: item.isTaskActivated
-                              ? const Color(0xFF389EB4).withOpacity(0.25)
+                              ? AppColors.kPrimary.withOpacity(0.25)
                               : const Color(0xFFE2E8F0),
                           width: 1.2,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: item.isTaskActivated
-                                ? const Color(0xFF389EB4).withOpacity(0.08)
+                                ? AppColors.kPrimary.withOpacity(0.08)
                                 : const Color(0x080F172A),
                             blurRadius: 14,
                             offset: const Offset(0, 4),
@@ -157,7 +158,7 @@ class _RepeatedState extends State<Repeated> {
                                   height: 42,
                                   decoration: BoxDecoration(
                                     color: item.isTaskActivated
-                                        ? const Color(0xFF389EB4).withOpacity(0.12)
+                                        ? AppColors.kPrimary.withOpacity(0.12)
                                         : const Color(0xFFF1F5F9),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -165,7 +166,7 @@ class _RepeatedState extends State<Repeated> {
                                     child: Icon(
                                       Icons.business_center_rounded,
                                       color: item.isTaskActivated
-                                          ? const Color(0xFF389EB4)
+                                          ? AppColors.kPrimary
                                           : const Color(0xFF94A3B8),
                                       size: 20,
                                     ),
@@ -224,8 +225,8 @@ class _RepeatedState extends State<Repeated> {
                                     await item.save();
                                     await MeetingAlarmHelper.syncAllMeetings();
                                   },
-                                  activeTrackColor: const Color(0xFF389EB4).withOpacity(0.4),
-                                  activeColor: const Color(0xFF389EB4),
+                                  activeTrackColor: AppColors.kPrimary.withOpacity(0.4),
+                                  activeColor: AppColors.kPrimary,
                                 ),
                                 PopupMenuButton<int>(
                                   onSelected: (val) {
@@ -240,9 +241,9 @@ class _RepeatedState extends State<Repeated> {
                                       value: 2,
                                       child: Row(
                                         children: [
-                                          Icon(Icons.edit_outlined, size: 18, color: Color(0xFF389EB4)),
+                                          Icon(Icons.edit_outlined, size: 18, color: AppColors.kPrimary),
                                           SizedBox(width: 8),
-                                          Text("Edit", style: TextStyle(color: Color(0xFF389EB4), fontWeight: FontWeight.bold)),
+                                          Text("Edit", style: TextStyle(color: AppColors.kPrimary, fontWeight: FontWeight.bold)),
                                         ],
                                       ),
                                     ),
@@ -290,7 +291,7 @@ class _RepeatedState extends State<Repeated> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.access_time_rounded, size: 13, color: Color(0xFF389EB4)),
+                                      const Icon(Icons.access_time_rounded, size: 13, color: AppColors.kPrimary),
                                       const SizedBox(width: 5),
                                       Text(
                                         "${_formatTime12h(item.Start)} - ${_formatTime12h(item.End)}",
@@ -348,7 +349,7 @@ class _RepeatedState extends State<Repeated> {
                                   width: 24,
                                   height: 24,
                                   decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
+                                    color: isSelected ? AppColors.kPrimary : const Color(0xFFF1F5F9),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Center(
@@ -383,13 +384,13 @@ class _RepeatedState extends State<Repeated> {
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF389EB4).withOpacity(0.12),
+                            color: AppColors.kPrimary.withOpacity(0.12),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             Icons.calendar_month_rounded,
                             size: 40,
-                            color: Color(0xFF389EB4),
+                            color: AppColors.kPrimary,
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -429,7 +430,7 @@ class _RepeatedState extends State<Repeated> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF389EB4),
+                            backgroundColor: AppColors.kPrimary,
                             elevation: 2,
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             shape: RoundedRectangleBorder(
@@ -480,12 +481,16 @@ class _RepeatedState extends State<Repeated> {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF389EB4),
+                  gradient: const LinearGradient(
+                    colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2.5),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF389EB4).withOpacity(0.42),
+                      color: AppColors.kPrimary.withOpacity(0.38),
                       blurRadius: 12,
                       offset: const Offset(0, 5),
                     ),
@@ -571,25 +576,33 @@ class _RepeatedState extends State<Repeated> {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        height: 36,
+        height: 38,
         decoration: BoxDecoration(
-          color: const Color(0xFF389EB4),
+          gradient: const LinearGradient(
+            colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF389EB4).withOpacity(0.28),
+              color: AppColors.kPrimary.withOpacity(0.28),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
           ],
         ),
         child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 12.5,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12.5,
+              ),
             ),
           ),
         ),
@@ -640,7 +653,7 @@ class _RepeatedState extends State<Repeated> {
     Fluttertoast.showToast(
       msg: 'Phone silenced for $label!',
       toastLength: Toast.LENGTH_SHORT,
-      backgroundColor: const Color(0xFF389EB4),
+      backgroundColor: AppColors.kPrimary,
       textColor: Colors.white,
     );
   }

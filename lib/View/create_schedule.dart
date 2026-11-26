@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
 import 'package:smart_silent/Provider/count_provider.dart';
@@ -82,7 +83,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
-            primary: Color(0xFF389EB4),
+            primary: AppColors.kPrimary,
             onPrimary: Colors.white,
             onSurface: Color(0xFF1E293B),
           ),
@@ -98,7 +99,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
-            primary: Color(0xFF389EB4),
+            primary: AppColors.kPrimary,
             onPrimary: Colors.white,
             onSurface: Color(0xFF1E293B),
           ),
@@ -125,7 +126,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
-            primary: Color(0xFF389EB4),
+            primary: AppColors.kPrimary,
             onPrimary: Colors.white,
             onSurface: Color(0xFF1E293B),
           ),
@@ -141,7 +142,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
-            primary: Color(0xFF389EB4),
+            primary: AppColors.kPrimary,
             onPrimary: Colors.white,
             onSurface: Color(0xFF1E293B),
           ),
@@ -228,7 +229,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
 
     Fluttertoast.showToast(
       msg: toastMsg,
-      backgroundColor: const Color(0xFF389EB4),
+      backgroundColor: AppColors.kPrimary,
       textColor: Colors.white,
     );
 
@@ -247,7 +248,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -286,7 +287,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF389EB4).withOpacity(0.3),
+                            color: AppColors.kPrimary.withOpacity(0.3),
                             blurRadius: 14,
                             offset: const Offset(0, 6),
                           ),
@@ -358,7 +359,7 @@ class _CreateScheduleState extends State<CreateSchedule> {
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       child: Row(
                         children: [
-                          const Icon(Icons.edit_calendar_rounded, color: Color(0xFF389EB4), size: 22),
+                          const Icon(Icons.edit_calendar_rounded, color: AppColors.kPrimary, size: 22),
                           const SizedBox(width: 10),
                           Expanded(
                             child: TextFormField(
@@ -409,10 +410,10 @@ class _CreateScheduleState extends State<CreateSchedule> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF389EB4).withOpacity(0.12),
+                                color: AppColors.kPrimary.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.play_circle_outline_rounded, color: Color(0xFF389EB4), size: 20),
+                              child: const Icon(Icons.play_circle_outline_rounded, color: AppColors.kPrimary, size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -475,10 +476,10 @@ class _CreateScheduleState extends State<CreateSchedule> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF389EB4).withOpacity(0.12),
+                                color: AppColors.kPrimary.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(Icons.stop_circle_outlined, color: Color(0xFF389EB4), size: 20),
+                              child: const Icon(Icons.stop_circle_outlined, color: AppColors.kPrimary, size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -527,15 +528,15 @@ class _CreateScheduleState extends State<CreateSchedule> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 13),
                               decoration: BoxDecoration(
-                                color: !isVibrateMode ? const Color(0xFF389EB4) : Colors.white,
+                                color: !isVibrateMode ? AppColors.kPrimary : Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: !isVibrateMode ? const Color(0xFF389EB4) : const Color(0xFFCBD5E1),
+                                  color: !isVibrateMode ? AppColors.kPrimary : const Color(0xFFCBD5E1),
                                 ),
                                 boxShadow: [
                                   if (!isVibrateMode)
                                     BoxShadow(
-                                      color: const Color(0xFF389EB4).withOpacity(0.28),
+                                      color: AppColors.kPrimary.withOpacity(0.28),
                                       blurRadius: 8,
                                       offset: const Offset(0, 3),
                                     ),
@@ -570,15 +571,15 @@ class _CreateScheduleState extends State<CreateSchedule> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 13),
                               decoration: BoxDecoration(
-                                color: isVibrateMode ? const Color(0xFF389EB4) : Colors.white,
+                                color: isVibrateMode ? AppColors.kPrimary : Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: isVibrateMode ? const Color(0xFF389EB4) : const Color(0xFFCBD5E1),
+                                  color: isVibrateMode ? AppColors.kPrimary : const Color(0xFFCBD5E1),
                                 ),
                                 boxShadow: [
                                   if (isVibrateMode)
                                     BoxShadow(
-                                      color: const Color(0xFF389EB4).withOpacity(0.28),
+                                      color: AppColors.kPrimary.withOpacity(0.28),
                                       blurRadius: 8,
                                       offset: const Offset(0, 3),
                                     ),
@@ -618,9 +619,9 @@ class _CreateScheduleState extends State<CreateSchedule> {
                       child: ElevatedButton(
                         onPressed: _saveSchedule,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF389EB4),
+                          backgroundColor: AppColors.kPrimary,
                           elevation: 3,
-                          shadowColor: const Color(0xFF389EB4).withOpacity(0.4),
+                          shadowColor: AppColors.kPrimary.withOpacity(0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -630,13 +631,17 @@ class _CreateScheduleState extends State<CreateSchedule> {
                           children: [
                             const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 21),
                             const SizedBox(width: 8),
-                            Text(
-                              widget.scheduleToEdit != null ? 'UPDATE SCHEDULE' : 'SAVE SCHEDULE',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                widget.scheduleToEdit != null ? 'UPDATE SCHEDULE' : 'SAVE SCHEDULE',
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ),
                           ],
@@ -648,17 +653,18 @@ class _CreateScheduleState extends State<CreateSchedule> {
                 ),
               ),
             ),
-
-            // Banner Ad at Bottom
-            if (isAdLoaded && _bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
           ],
         ),
+        bottomNavigationBar: isAdLoaded && _bannerAd != null
+            ? SafeArea(
+                child: Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                ),
+              )
+            : null,
       ),
     );
   }

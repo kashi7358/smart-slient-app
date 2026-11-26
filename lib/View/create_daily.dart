@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/repeated_model.dart';
 import 'package:smart_silent/Utils/meeting_alarm_helper.dart';
 
@@ -105,7 +106,7 @@ class _CreateDailyState extends State<CreateDaily> {
         return Theme(
           data: ThemeData.light().copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF389EB4),
+              primary: AppColors.kPrimary,
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Color(0xFF1E293B),
@@ -160,7 +161,7 @@ class _CreateDailyState extends State<CreateDaily> {
       if (mounted) {
         Fluttertoast.showToast(
           msg: "Meeting Schedule Updated Successfully!",
-          backgroundColor: const Color(0xFF389EB4),
+          backgroundColor: AppColors.kPrimary,
           textColor: Colors.white,
         );
         Navigator.pop(context, true);
@@ -183,7 +184,7 @@ class _CreateDailyState extends State<CreateDaily> {
     if (mounted) {
       Fluttertoast.showToast(
         msg: "Meeting Schedule Saved Successfully!",
-        backgroundColor: const Color(0xFF389EB4),
+        backgroundColor: AppColors.kPrimary,
         textColor: Colors.white,
       );
       Navigator.pop(context, true);
@@ -199,7 +200,7 @@ class _CreateDailyState extends State<CreateDaily> {
         statusBarBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -255,7 +256,7 @@ class _CreateDailyState extends State<CreateDaily> {
                     color: Color(0xFF1E293B),
                   ),
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.business_center_outlined, color: Color(0xFF389EB4), size: 22),
+                    prefixIcon: const Icon(Icons.business_center_outlined, color: AppColors.kPrimary, size: 22),
                     hintText: 'e.g., Weekly Team Sync, Class, Gym',
                     hintStyle: TextStyle(
                       fontSize: 14,
@@ -337,7 +338,7 @@ class _CreateDailyState extends State<CreateDaily> {
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF389EB4),
+                        color: AppColors.kPrimary,
                       ),
                     ),
                   ),
@@ -378,12 +379,12 @@ class _CreateDailyState extends State<CreateDaily> {
                             width: 38,
                             height: 38,
                             decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFF389EB4) : const Color(0xFFF1F5F9),
+                              color: isSelected ? AppColors.kPrimary : const Color(0xFFF1F5F9),
                               shape: BoxShape.circle,
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFF389EB4).withOpacity(0.35),
+                                        color: AppColors.kPrimary.withOpacity(0.35),
                                         blurRadius: 6,
                                         offset: const Offset(0, 2),
                                       ),
@@ -447,26 +448,30 @@ class _CreateDailyState extends State<CreateDaily> {
                   width: double.infinity,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF389EB4),
+                    color: AppColors.kPrimary,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF389EB4).withOpacity(0.35),
+                        color: AppColors.kPrimary.withOpacity(0.35),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Center(
-                    child: Text(
-                      widget.existingSchedule != null
-                          ? 'Update Meeting Schedule'
-                          : 'Save Meeting Schedule',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.existingSchedule != null
+                            ? 'Update Meeting Schedule'
+                            : 'Save Meeting Schedule',
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
                   ),
@@ -478,11 +483,14 @@ class _CreateDailyState extends State<CreateDaily> {
           ),
         ),
         bottomNavigationBar: isAdLoaded
-            ? Container(
-                decoration: const BoxDecoration(color: Colors.transparent),
-                height: _bannerAd.size.height.toDouble(),
-                width: _bannerAd.size.width.toDouble(),
-                child: AdWidget(ad: _bannerAd),
+            ? SafeArea(
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(color: Colors.transparent),
+                  height: _bannerAd.size.height.toDouble(),
+                  width: _bannerAd.size.width.toDouble(),
+                  child: AdWidget(ad: _bannerAd),
+                ),
               )
             : const SizedBox.shrink(),
       ),
@@ -532,7 +540,7 @@ class _CreateDailyState extends State<CreateDaily> {
                     color: Color(0xFF1E293B),
                   ),
                 ),
-                const Icon(Icons.access_time_rounded, color: Color(0xFF389EB4), size: 20),
+                const Icon(Icons.access_time_rounded, color: AppColors.kPrimary, size: 20),
               ],
             ),
           ],
@@ -589,8 +597,8 @@ class _CreateDailyState extends State<CreateDaily> {
           Switch.adaptive(
             value: value,
             onChanged: onChanged,
-            activeColor: const Color(0xFF389EB4),
-            activeTrackColor: const Color(0xFF389EB4).withOpacity(0.35),
+            activeColor: AppColors.kPrimary,
+            activeTrackColor: AppColors.kPrimary.withOpacity(0.35),
           ),
         ],
       ),

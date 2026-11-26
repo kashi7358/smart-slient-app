@@ -11,6 +11,7 @@ import 'package:smart_silent/Provider/count_provider.dart';
 import 'package:smart_silent/Utils/hijri_helper.dart';
 import 'package:smart_silent/Utils/prayer_alarm_helper.dart';
 import 'package:smart_silent/View/setings.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/nemaz_model.dart';
 import 'package:sound_mode/permission_handler.dart';
 
@@ -126,7 +127,7 @@ class _CreateNemazState extends State<CreateNemaz> {
         return Theme(
           data: ThemeData.light().copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0284C7),
+              primary: AppColors.kPrimary,
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Color(0xFF1E293B),
@@ -236,7 +237,7 @@ class _CreateNemazState extends State<CreateNemaz> {
           Fluttertoast.showToast(
             msg: "Prayer Timings & Auto-Silent Alarms Saved Successfully!",
             toastLength: Toast.LENGTH_SHORT,
-            backgroundColor: const Color(0xFF0284C7),
+            backgroundColor: AppColors.kPrimary,
             textColor: Colors.white,
           );
         }
@@ -345,11 +346,11 @@ class _CreateNemazState extends State<CreateNemaz> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF0284C7).withOpacity(0.12),
+                                    color: AppColors.kPrimary.withOpacity(0.12),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(Icons.access_time_rounded,
-                                      color: Color(0xFF0284C7), size: 20),
+                                      color: AppColors.kPrimary, size: 20),
                                 ),
                                 const SizedBox(width: 14),
                                 const Text(
@@ -367,7 +368,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF0284C7),
+                                color: AppColors.kPrimary,
                               ),
                             ),
                           ],
@@ -439,7 +440,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                       height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0284C7),
+                          backgroundColor: AppColors.kPrimary,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
@@ -488,7 +489,7 @@ class _CreateNemazState extends State<CreateNemaz> {
         statusBarBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF3F7FA),
+        backgroundColor: AppColors.kbg,
         body: Column(
           children: [
             // Top Mosque Graphic Banner with back & settings buttons (zero overflow)
@@ -507,7 +508,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                       name: 'Fajr',
                       icon: Icons.mosque_rounded,
                       iconBgColor: const Color(0xFFE0F7FA),
-                      iconColor: const Color(0xFF0284C7),
+                      iconColor: AppColors.kPrimary,
                       startTime: fajarStart,
                       endTime: fajarEnd,
                       onTap: () {
@@ -627,7 +628,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                           : 'Tap to switch to auto-adjust prayer times',
                       icon: Icons.notifications_active_rounded,
                       iconBgColor: const Color(0xFFE0F2FE),
-                      iconColor: const Color(0xFF0284C7),
+                      iconColor: AppColors.kPrimary,
                       value: isSmartMode,
                       onChanged: (val) {
                         setState(() {
@@ -659,20 +660,20 @@ class _CreateNemazState extends State<CreateNemaz> {
 
                     const SizedBox(height: 20),
 
-                    // Prominent Save Prayer Timings Button (Requested by User)
+                    // Prominent Save Prayer Timings Button
                     Container(
                       width: double.infinity,
                       height: 52,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
+                          colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0284C7).withOpacity(0.35),
+                            color: AppColors.kPrimary.withOpacity(0.35),
                             blurRadius: 12,
                             offset: const Offset(0, 5),
                           ),
@@ -698,13 +699,17 @@ class _CreateNemazState extends State<CreateNemaz> {
                                     children: const [
                                       Icon(Icons.check_circle_rounded, color: Colors.white, size: 21),
                                       SizedBox(width: 8),
-                                      Text(
-                                        'Save Prayer Timings',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.3,
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'Save Prayer Timings',
+                                          maxLines: 1,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.3,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -721,6 +726,16 @@ class _CreateNemazState extends State<CreateNemaz> {
             ),
           ],
         ),
+        bottomNavigationBar: isAdLoaded
+            ? SafeArea(
+                child: Container(
+                  alignment: Alignment.center,
+                  height: _bannerAd.size.height.toDouble(),
+                  width: _bannerAd.size.width.toDouble(),
+                  child: AdWidget(ad: _bannerAd),
+                ),
+              )
+            : null,
       ),
     );
   }
@@ -733,9 +748,9 @@ class _CreateNemazState extends State<CreateNemaz> {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFFCEEEFA),
-            Color(0xFFE4F5FC),
-            Color(0xFFF3F9FC),
+            Color(0xFFEDE7F6),
+            Color(0xFFF3E8FF),
+            Color(0xFFF8F6FC),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -774,7 +789,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                           border: Border.all(color: Colors.white.withOpacity(0.85), width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1E3A8A).withOpacity(0.08),
+                              color: AppColors.kPrimary.withOpacity(0.08),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -783,7 +798,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                         child: const Center(
                           child: Icon(
                             Icons.arrow_back_ios_new_rounded,
-                            color: Color(0xFF1E3A8A),
+                            color: AppColors.kPrimary,
                             size: 18,
                           ),
                         ),
@@ -801,7 +816,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A8A),
+                            color: AppColors.kPrimary,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -811,7 +826,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.92),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFF0284C7).withOpacity(0.2)),
+                            border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.04),
@@ -827,7 +842,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                               children: [
                                 const Icon(
                                   Icons.calendar_month_rounded,
-                                  color: Color(0xFF0284C7),
+                                  color: AppColors.kPrimary,
                                   size: 13,
                                 ),
                                 const SizedBox(width: 5),
@@ -869,7 +884,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                           border: Border.all(color: Colors.white.withOpacity(0.85), width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1E3A8A).withOpacity(0.08),
+                              color: AppColors.kPrimary.withOpacity(0.08),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -878,7 +893,7 @@ class _CreateNemazState extends State<CreateNemaz> {
                         child: const Center(
                           child: Icon(
                             Icons.settings_rounded,
-                            color: Color(0xFF1E3A8A),
+                            color: AppColors.kPrimary,
                             size: 20,
                           ),
                         ),
@@ -1024,7 +1039,7 @@ class _CreateNemazState extends State<CreateNemaz> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: value ? const Color(0xFF0284C7).withOpacity(0.35) : const Color(0xFFEBF0F5),
+            color: value ? AppColors.kPrimary.withOpacity(0.35) : const Color(0xFFEBF0F5),
             width: value ? 1.5 : 1.2,
           ),
           boxShadow: [
@@ -1081,7 +1096,7 @@ class _CreateNemazState extends State<CreateNemaz> {
             // Cupertino Switch toggle
             CupertinoSwitch(
               value: value,
-              activeColor: const Color(0xFF0284C7),
+              activeColor: AppColors.kPrimary,
               onChanged: onChanged,
             ),
           ],
@@ -1115,7 +1130,7 @@ class _TopHeaderMosquePainter extends CustomPainter {
     canvas.drawCircle(moonCenter, 16, moonGlow);
 
     final moonPaint = Paint()
-      ..color = const Color(0xFF0284C7).withOpacity(0.55)
+      ..color = AppColors.kPrimary.withOpacity(0.55)
       ..style = PaintingStyle.fill;
 
     final moonPath = Path()
@@ -1128,12 +1143,12 @@ class _TopHeaderMosquePainter extends CustomPainter {
     canvas.drawPath(moonPath, moonPaint);
 
     // Morning star beside the moon
-    _drawStar(canvas, Offset(size.width * 0.73, 26), 4.5, const Color(0xFF0284C7).withOpacity(0.55));
-    _drawStar(canvas, Offset(size.width * 0.35, 34), 3.5, const Color(0xFF0284C7).withOpacity(0.35));
+    _drawStar(canvas, Offset(size.width * 0.73, 26), 4.5, AppColors.kPrimary.withOpacity(0.55));
+    _drawStar(canvas, Offset(size.width * 0.35, 34), 3.5, AppColors.kPrimary.withOpacity(0.35));
 
     // 3. Layer 1: Distant Background Mosque Silhouettes (Pale Cyan)
     final distantPaint = Paint()
-      ..color = const Color(0xFF0284C7).withOpacity(0.12)
+      ..color = AppColors.kPrimary.withOpacity(0.12)
       ..style = PaintingStyle.fill;
 
     _drawMinaret(canvas, centerX - 148, 85, 8, bottom, distantPaint);
@@ -1143,7 +1158,7 @@ class _TopHeaderMosquePainter extends CustomPainter {
 
     // 4. Layer 2: Midground Mosque Elements (Medium Cyan)
     final midPaint = Paint()
-      ..color = const Color(0xFF0284C7).withOpacity(0.22)
+      ..color = AppColors.kPrimary.withOpacity(0.22)
       ..style = PaintingStyle.fill;
 
     _drawMinaret(canvas, centerX - 118, 102, 9.5, bottom, midPaint);
@@ -1153,7 +1168,7 @@ class _TopHeaderMosquePainter extends CustomPainter {
 
     // 5. Layer 3: Foreground Grand Central Mosque (Rich Cyan with Details)
     final fgPaint = Paint()
-      ..color = const Color(0xFF0284C7).withOpacity(0.36)
+      ..color = AppColors.kPrimary.withOpacity(0.36)
       ..style = PaintingStyle.fill;
 
     // Central Grand Dome
@@ -1161,7 +1176,7 @@ class _TopHeaderMosquePainter extends CustomPainter {
 
     // Crescent finial on central dome
     final finialPaint = Paint()
-      ..color = const Color(0xFF0284C7).withOpacity(0.55)
+      ..color = AppColors.kPrimary.withOpacity(0.55)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
     canvas.drawLine(Offset(centerX, bottom - 72), Offset(centerX, bottom - 98), finialPaint);

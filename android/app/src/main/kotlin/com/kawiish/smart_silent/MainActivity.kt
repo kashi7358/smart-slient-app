@@ -214,6 +214,25 @@ class MainActivity: FlutterActivity() {
                     }
                     result.success(granted)
                 }
+                "openDndSettings" -> {
+                    var opened = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        try {
+                            val detailIntent = Intent("android.settings.NOTIFICATION_POLICY_ACCESS_DETAIL_SETTINGS").apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(detailIntent)
+                            opened = true
+                        } catch (_: Exception) {}
+                    }
+                    if (!opened) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                            opened = true
+                        } catch (_: Exception) {}
+                    }
+                    result.success(opened)
+                }
                 "getDeviceManufacturer" -> {
                     val m = Build.MANUFACTURER ?: "Unknown"
                     val formatted = if (m.isNotEmpty()) m.substring(0, 1).uppercase() + m.substring(1).lowercase() else "Unknown"
@@ -234,7 +253,18 @@ class MainActivity: FlutterActivity() {
                                 data = Uri.parse("package:$packageName")
                             }
                             startActivity(intent)
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                            try {
+                                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                            } catch (_: Exception) {
+                                try {
+                                    val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.parse("package:$packageName")
+                                    }
+                                    startActivity(fallback)
+                                } catch (_: Exception) {}
+                            }
+                        }
                     }
                     result.success(null)
                 }
@@ -249,14 +279,29 @@ class MainActivity: FlutterActivity() {
                 "requestIgnoreBatteryOptimizations" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                data = Uri.parse("package:$packageName")
+                            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                            val alreadyIgnoring = pm?.isIgnoringBatteryOptimizations(packageName) == true
+                            val intent = if (alreadyIgnoring) {
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                }
+                            } else {
+                                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                }
                             }
                             startActivity(intent)
                         } catch (_: Exception) {
                             try {
-                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                            } catch (_: Exception) {}
+                                val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:$packageName")
+                                }
+                                startActivity(fallback)
+                            } catch (_: Exception) {
+                                try {
+                                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                     result.success(null)

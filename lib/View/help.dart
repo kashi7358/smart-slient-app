@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sound_mode/permission_handler.dart';
+import 'package:smart_silent/Utils/device_compatibility_helper.dart';
+import 'package:smart_silent/constants.dart';
 
 class Help extends StatefulWidget {
   const Help({super.key});
@@ -16,7 +17,7 @@ class _HelpState extends State<Help> {
     {
       'title': 'Prayer Times (Namaz)',
       'icon': Icons.mosque_rounded,
-      'color': Color(0xFF0284C7),
+      'color': AppColors.kPrimary,
       'steps': [
         {
           'number': '1',
@@ -43,7 +44,7 @@ class _HelpState extends State<Help> {
     {
       'title': 'Meeting Schedules',
       'icon': Icons.business_center_rounded,
-      'color': Color(0xFF0D9488),
+      'color': AppColors.kPrimaryLight,
       'steps': [
         {
           'number': '1',
@@ -146,7 +147,7 @@ class _HelpState extends State<Help> {
         statusBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -173,14 +174,14 @@ class _HelpState extends State<Help> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
+                  colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0284C7).withOpacity(0.28),
+                    color: AppColors.kPrimary.withOpacity(0.28),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -422,7 +423,7 @@ class _HelpState extends State<Help> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.settings_suggest_rounded, color: Color(0xFF0284C7), size: 24),
+                  const Icon(Icons.settings_suggest_rounded, color: AppColors.kPrimary, size: 24),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -436,11 +437,11 @@ class _HelpState extends State<Help> {
                   ),
                   TextButton(
                     onPressed: () async {
-                      await PermissionHandler.openDoNotDisturbSetting();
+                      await DeviceCompatibilityHelper.openDndSettings();
                     },
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      backgroundColor: const Color(0xFF0284C7),
+                      backgroundColor: AppColors.kPrimary,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     child: const Text(

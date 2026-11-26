@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_silent/Boxes/boxes.dart';
@@ -113,7 +114,7 @@ class _OneTimeState extends State<OneTime> {
       await OneTimeAlarmHelper.scheduleOneTime(item);
       Fluttertoast.showToast(
         msg: "Schedule activated",
-        backgroundColor: const Color(0xFF389EB4),
+        backgroundColor: AppColors.kPrimary,
         textColor: Colors.white,
       );
     } else {
@@ -184,7 +185,7 @@ class _OneTimeState extends State<OneTime> {
 
     Fluttertoast.showToast(
       msg: "Schedule deleted",
-      backgroundColor: const Color(0xFF389EB4),
+      backgroundColor: AppColors.kPrimary,
       textColor: Colors.white,
     );
   }
@@ -206,7 +207,7 @@ class _OneTimeState extends State<OneTime> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppColors.kbg,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0.5,
@@ -225,7 +226,7 @@ class _OneTimeState extends State<OneTime> {
           centerTitle: true,
           actions: [
             IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF389EB4), size: 26),
+              icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.kPrimary, size: 26),
               tooltip: 'Add Schedule',
               onPressed: () => _openCreateOrEditScreen(),
             ),
@@ -267,28 +268,33 @@ class _OneTimeState extends State<OneTime> {
                 },
               ),
             ),
-
-            // Banner Ad at Bottom
-            if (_isAdLoaded && _bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                color: Colors.white,
-                child: AdWidget(ad: _bannerAd!),
-              ),
           ],
         ),
+        bottomNavigationBar: _isAdLoaded && _bannerAd != null
+            ? SafeArea(
+                child: Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  color: Colors.white,
+                  child: AdWidget(ad: _bannerAd!),
+                ),
+              )
+            : null,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _openCreateOrEditScreen(),
-          backgroundColor: const Color(0xFF389EB4),
+          backgroundColor: AppColors.kPrimary,
           icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-          label: const Text(
-            'New Schedule',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
+          label: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'New Schedule',
+              maxLines: 1,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
           ),
           elevation: 4,
@@ -308,13 +314,13 @@ class _OneTimeState extends State<OneTime> {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: const Color(0xFF389EB4).withOpacity(0.1),
+                color: AppColors.kPrimary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Center(
                 child: Icon(
                   Icons.event_note_rounded,
-                  color: Color(0xFF389EB4),
+                  color: AppColors.kPrimary,
                   size: 46,
                 ),
               ),
@@ -341,7 +347,7 @@ class _OneTimeState extends State<OneTime> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF389EB4),
+                backgroundColor: AppColors.kPrimary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -373,7 +379,7 @@ class _OneTimeState extends State<OneTime> {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isCurrentlyActive
-              ? const Color(0xFF389EB4).withOpacity(0.6)
+              ? AppColors.kPrimary.withOpacity(0.6)
               : const Color(0xFFE2E8F0),
           width: isCurrentlyActive ? 1.5 : 1.0,
         ),
@@ -397,13 +403,13 @@ class _OneTimeState extends State<OneTime> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isCurrentlyActive
-                        ? const Color(0xFF389EB4).withOpacity(0.15)
+                        ? AppColors.kPrimary.withOpacity(0.15)
                         : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     item.isSilentOrVibration ? Icons.vibration_rounded : Icons.volume_off_rounded,
-                    color: isCurrentlyActive ? const Color(0xFF389EB4) : const Color(0xFF64748B),
+                    color: isCurrentlyActive ? AppColors.kPrimary : const Color(0xFF64748B),
                     size: 20,
                   ),
                 ),
@@ -432,7 +438,7 @@ class _OneTimeState extends State<OneTime> {
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: isCurrentlyActive
-                                  ? const Color(0xFF389EB4)
+                                  ? AppColors.kPrimary
                                   : const Color(0xFF64748B),
                             ),
                           ),
@@ -461,7 +467,7 @@ class _OneTimeState extends State<OneTime> {
                 ),
                 Switch(
                   value: item.isTaskActivated,
-                  activeColor: const Color(0xFF389EB4),
+                  activeColor: AppColors.kPrimary,
                   onChanged: (val) => _toggleSchedule(item, val),
                 ),
               ],
@@ -495,7 +501,7 @@ class _OneTimeState extends State<OneTime> {
                   decoration: BoxDecoration(
                     color: item.isSilentOrVibration
                         ? const Color(0xFFF59E0B).withOpacity(0.12)
-                        : const Color(0xFF389EB4).withOpacity(0.12),
+                        : AppColors.kPrimary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -505,7 +511,7 @@ class _OneTimeState extends State<OneTime> {
                       fontWeight: FontWeight.bold,
                       color: item.isSilentOrVibration
                           ? const Color(0xFFD97706)
-                          : const Color(0xFF389EB4),
+                          : AppColors.kPrimary,
                     ),
                   ),
                 ),
@@ -526,14 +532,14 @@ class _OneTimeState extends State<OneTime> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     child: Row(
                       children: const [
-                        Icon(Icons.edit_outlined, size: 16, color: Color(0xFF389EB4)),
+                        Icon(Icons.edit_outlined, size: 16, color: AppColors.kPrimary),
                         SizedBox(width: 4),
                         Text(
                           'Edit',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF389EB4),
+                            color: AppColors.kPrimary,
                           ),
                         ),
                       ],

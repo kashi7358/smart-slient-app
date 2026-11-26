@@ -1,10 +1,25 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smart_silent/constants.dart';
+import 'package:sound_mode/permission_handler.dart';
 
 class DeviceCompatibilityHelper {
   static const MethodChannel _channel =
       MethodChannel('com.kawiish.smartsilent/device_compatibility');
+
+  /// Open Do Not Disturb settings directly to Smart Silent's toggle page (Android 10+),
+  /// falling back to the DND app list if unavailable.
+  static Future<void> openDndSettings() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final bool? opened = await _channel.invokeMethod<bool>('openDndSettings');
+      if (opened == true) return;
+    } catch (_) {}
+    try {
+      await PermissionHandler.openDoNotDisturbSetting();
+    } catch (_) {}
+  }
 
   /// Check whether app is allowed to schedule exact alarms (Android 12/13/14/15)
   static Future<bool> canScheduleExactAlarms() async {
@@ -136,12 +151,12 @@ class DeviceCompatibilityHelper {
             Container(
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
-                color: const Color(0xFF0284C7).withOpacity(0.12),
+                color: AppColors.kPrimary.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.battery_charging_full_rounded,
-                color: Color(0xFF0284C7),
+                color: AppColors.kPrimary,
                 size: 24,
               ),
             ),
@@ -172,7 +187,7 @@ class DeviceCompatibilityHelper {
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF0284C7),
+                color: AppColors.kPrimary,
               ),
             ),
           ],
@@ -187,7 +202,7 @@ class DeviceCompatibilityHelper {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0284C7),
+              backgroundColor: AppColors.kPrimary,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

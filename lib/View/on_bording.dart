@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/Utils/device_compatibility_helper.dart';
 import 'package:smart_silent/View/tab_bar.dart';
 import 'package:sound_mode/permission_handler.dart';
@@ -19,6 +20,8 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
 
   bool _isDndGranted = false;
   bool _isBatteryOptimized = false;
+  bool _canExactAlarms = true;
+  bool _showExactAlarmCard = false;
   String _deviceBrand = 'Android';
 
   @override
@@ -69,11 +72,14 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
     }
 
     final bool battery = await DeviceCompatibilityHelper.isIgnoringBatteryOptimizations();
+    final bool exact = await DeviceCompatibilityHelper.canScheduleExactAlarms();
 
     if (mounted) {
       setState(() {
         _isDndGranted = dnd;
         _isBatteryOptimized = battery;
+        _canExactAlarms = exact;
+        if (!exact) _showExactAlarmCard = true;
       });
     }
   }
@@ -94,7 +100,11 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
   }
 
   Future<void> _requestDndPermission() async {
-    await PermissionHandler.openDoNotDisturbSetting();
+    await DeviceCompatibilityHelper.openDndSettings();
+  }
+
+  Future<void> _requestExactAlarmPermission() async {
+    await DeviceCompatibilityHelper.requestScheduleExactAlarm();
   }
 
   Future<void> _requestBatteryOptimization() async {
@@ -162,14 +172,14 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
             height: 88,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF389EB4), Color(0xFF2B7A8D)],
+                colors: [AppColors.kPrimary, Color(0xFF2B7A8D)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(26),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF389EB4).withOpacity(0.35),
+                  color: AppColors.kPrimary.withOpacity(0.35),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -206,7 +216,7 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
           // Feature Highlights
           _buildFeatureTile(
             icon: Icons.mosque_rounded,
-            iconColor: const Color(0xFF389EB4),
+            iconColor: AppColors.kPrimary,
             title: 'Prayer Times (Namaz)',
             subtitle: 'Auto-silences during all 5 prayers based on your local mosque or prayer schedule.',
           ),
@@ -321,12 +331,12 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: const Color(0xFF389EB4).withOpacity(0.12),
+              color: AppColors.kPrimary.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.verified_user_rounded,
-              color: Color(0xFF389EB4),
+              color: AppColors.kPrimary,
               size: 38,
             ),
           ),
@@ -355,7 +365,7 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
           // Card 1: Do Not Disturb Mode (Essential)
           _buildPermissionCard(
             icon: Icons.do_not_disturb_on_rounded,
-            iconColor: const Color(0xFF389EB4),
+            iconColor: AppColors.kPrimary,
             title: 'Do Not Disturb Access',
             badgeText: 'REQUIRED',
             badgeColor: const Color(0xFFE0F2FE),
@@ -383,6 +393,24 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
             onTap: _requestBatteryOptimization,
           ),
           const SizedBox(height: 14),
+
+          // Card 2b: Exact Alarms (only when permission is missing)
+          if (_showExactAlarmCard || !_canExactAlarms) ...[
+            _buildPermissionCard(
+              icon: Icons.alarm_on_rounded,
+              iconColor: AppColors.kPrimaryLight,
+              title: 'Exact Alarms Access',
+              badgeText: 'REQUIRED',
+              badgeColor: AppColors.kSecondary,
+              badgeTextColor: AppColors.kPrimary,
+              subtitle: 'Ensures prayer and meeting silent timers trigger at the exact scheduled minute.',
+              isGranted: _canExactAlarms,
+              grantedText: 'Granted',
+              actionText: 'Allow',
+              onTap: _requestExactAlarmPermission,
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // Card 3: Auto-Start / OEM Settings
           _buildPermissionCard(
@@ -554,103 +582,114 @@ class _OnBordingScreenState extends State<OnBordingScreen> with WidgetsBindingOb
 
   // Bottom Navigation Controls
   Widget _buildBottomNavigation() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8FAFC),
-        border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Page Indicator Dots
-          Row(
-            children: List.generate(2, (index) {
-              final bool isActive = _currentPage == index;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.only(right: 6),
-                width: isActive ? 24 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF389EB4) : const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              );
-            }),
-          ),
-
-          // Action Button
-          if (_currentPage == 0)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF389EB4),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              onPressed: () {
-                _controller.nextPage(
-                  duration: const Duration(milliseconds: 320),
-                  curve: Curves.easeInOut,
-                );
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text(
-                    'Get Started',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        decoration: const BoxDecoration(
+          color: AppColors.kbg,
+          border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Page Indicator Dots
+            Row(
+              children: List.generate(2, (index) {
+                final bool isActive = _currentPage == index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.only(right: 6),
+                  width: isActive ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive ? AppColors.kPrimary : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_rounded, size: 18),
-                ],
-              ),
-            )
-          else
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isDndGranted ? const Color(0xFF389EB4) : const Color(0xFF0F172A),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              onPressed: () {
-                if (!_isDndGranted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Please grant "Do Not Disturb" permission to enable automatic silent schedules.'),
-                      backgroundColor: const Color(0xFF1E293B),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      action: SnackBarAction(
-                        label: 'Grant',
-                        textColor: const Color(0xFF389EB4),
-                        onPressed: _requestDndPermission,
+                );
+              }),
+            ),
+
+            const SizedBox(width: 12),
+
+            // Action Button
+            Flexible(
+              child: _currentPage == 0
+                  ? ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.kPrimary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        _controller.nextPage(
+                          duration: const Duration(milliseconds: 320),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Text(
+                              'Get Started',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.arrow_forward_rounded, size: 18),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isDndGranted ? AppColors.kPrimary : const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        if (!_isDndGranted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Please grant "Do Not Disturb" permission to enable automatic silent schedules.'),
+                              backgroundColor: const Color(0xFF1E293B),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              action: SnackBarAction(
+                                label: 'Grant',
+                                textColor: AppColors.kPrimaryLight,
+                                onPressed: _requestDndPermission,
+                              ),
+                            ),
+                          );
+                          _finishOnboardingToHome();
+                        } else {
+                          _finishOnboardingToHome();
+                        }
+                      },
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Text(
+                              'Continue to App',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.check_rounded, size: 18),
+                          ],
+                        ),
                       ),
                     ),
-                  );
-                  // Allow them into the app if they tap again, or finish
-                  _finishOnboardingToHome();
-                } else {
-                  _finishOnboardingToHome();
-                }
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text(
-                    'Continue to App',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.check_rounded, size: 18),
-                ],
-              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

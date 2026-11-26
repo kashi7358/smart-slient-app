@@ -13,6 +13,7 @@ import 'package:smart_silent/View/create_nemaz.dart';
 import 'package:smart_silent/View/help.dart';
 import 'package:smart_silent/View/on_bording.dart';
 import 'package:smart_silent/View/privacy_policy.dart';
+import 'package:smart_silent/constants.dart';
 import 'package:smart_silent/models/nemaz_model.dart';
 import 'package:smart_silent/models/repeated_model.dart';
 import 'package:smart_silent/models/schedule_model.dart';
@@ -56,7 +57,13 @@ class _SettingsState extends State<Settings> with WidgetsBindingObserver {
 
   Future<void> _checkAllPermissions() async {
     try {
-      final dnd = (await PermissionHandler.permissionsGranted) ?? false;
+      bool dnd = false;
+      try {
+        dnd = (await PermissionHandler.permissionsGranted) ?? false;
+      } catch (_) {}
+      if (!dnd) {
+        dnd = await DeviceCompatibilityHelper.hasDndPermission();
+      }
       final battery = await DeviceCompatibilityHelper.isIgnoringBatteryOptimizations();
       final exact = await DeviceCompatibilityHelper.canScheduleExactAlarms();
       final manufacturer = await DeviceCompatibilityHelper.getDeviceManufacturer();
@@ -220,14 +227,14 @@ class _SettingsState extends State<Settings> with WidgetsBindingObserver {
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF0284C7), Color(0xFF0D9488)],
+                  colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0284C7).withOpacity(0.32),
+                    color: AppColors.kPrimary.withOpacity(0.32),
                     blurRadius: 16,
                     offset: const Offset(0, 7),
                   ),
@@ -307,7 +314,7 @@ class _SettingsState extends State<Settings> with WidgetsBindingObserver {
             // 1. Do Not Disturb Permission Card
             _buildHumanCard(
               icon: Icons.do_not_disturb_on_rounded,
-              iconColor: const Color(0xFF0284C7),
+              iconColor: AppColors.kPrimary,
               iconBgColor: const Color(0xFFE0F2FE),
               title: 'Do Not Disturb (DND) Access',
               subtitle: _isDndGranted
@@ -340,7 +347,7 @@ class _SettingsState extends State<Settings> with WidgetsBindingObserver {
                 ),
               ),
               onTap: () async {
-                await PermissionHandler.openDoNotDisturbSetting();
+                await DeviceCompatibilityHelper.openDndSettings();
                 await Future.delayed(const Duration(milliseconds: 500));
                 _checkAllPermissions();
               },
@@ -474,7 +481,7 @@ class _SettingsState extends State<Settings> with WidgetsBindingObserver {
             // Prayer Timings Shortcut Card
             _buildHumanCard(
               icon: Icons.mosque_rounded,
-              iconColor: const Color(0xFF0D9488),
+              iconColor: AppColors.kPrimaryLight,
               iconBgColor: const Color(0xFFCCFBF1),
               title: 'Prayer Timings & Preferences',
               subtitle: 'Configure daily silent window for Fajr, Zuhr, Asr, Maghrib, and Isha.',
