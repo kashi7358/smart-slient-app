@@ -89,11 +89,26 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     {'name': 'Isha', 'time': '08:45 PM', 'next': 'Fajr', 'nextTime': '05:10 AM'},
   ];
 
-  // Unified brand purple gradient matching app logo across all prayer slides
-  static const List<Color> _prayerBannerGradient = [
-    AppColors.kPrimaryDark,
+  // Dynamic Background Gradients matching each prayer's time-of-day (Zohar uses brand purple instead of green)
+  static const List<List<Color>> _prayerGradients = [
+    // 0: Fajr (Dawn / Subh Sadiq)
+    [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
+    // 1: Zohar (Midday / Brand Royal Purple)
+    [AppColors.kPrimaryDark, AppColors.kPrimary, AppColors.kPrimaryLight],
+    // 2: Asr (Late Afternoon / Golden Hour)
+    [Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)],
+    // 3: Maghrib (Sunset Dusk / Twilight Crimson-Purple)
+    [Color(0xFF581C87), Color(0xFF7E22CE), Color(0xFFBE185D)],
+    // 4: Isha (Midnight Celestial Night Sky)
+    [Color(0xFF0B132B), Color(0xFF1C2541), Color(0xFF3A506B)],
+  ];
+
+  static const List<Color> _prayerGradientsGlow = [
+    Color(0xFF2C5364),
     AppColors.kPrimary,
-    AppColors.kPrimaryLight,
+    Color(0xFFD97706),
+    Color(0xFF7E22CE),
+    Color(0xFF1C2541),
   ];
 
   @override
@@ -1319,7 +1334,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        padding: EdgeInsets.only(bottom: _isAdLoaded ? 230 : 175), // Space for bottom Quick Silent bar, banner ad & raised FAB
+                        padding: const EdgeInsets.only(bottom: 28), // Clean breathing room above bottomNavigationBar & FAB
                         child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1348,52 +1363,60 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
 
                           const SizedBox(height: 12),
 
-                          // 3. Compact Horizontal Schedule Cards (1.png, 2.jpg, 3.png)
-                          SizedBox(
-                            height: 145,
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              physics: const BouncingScrollPhysics(),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              children: [
-                                _buildScheduleCard(
-                                  imagePath: 'assets/images/1.png',
-                                  title: 'Prayer Timings',
-                                  isSelected: _selectedScheduleTabIndex == 0,
-                                  onTap: () async {
-                                    setState(() => _selectedScheduleTabIndex = 0);
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const CreateNemaz()),
-                                    );
-                                    _refreshPrayerTimesAndSlider();
-                                  },
-                                ),
-                                _buildScheduleCard(
-                                  imagePath: 'assets/images/2.jpg',
-                                  title: 'One Time',
-                                  isSelected: _selectedScheduleTabIndex == 1,
-                                  onTap: () async {
-                                    setState(() => _selectedScheduleTabIndex = 1);
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const OneTime()),
-                                    );
-                                  },
-                                ),
-                                _buildScheduleCard(
-                                  imagePath: 'assets/images/3.png',
-                                  title: 'Meetings',
-                                  isSelected: _selectedScheduleTabIndex == 2,
-                                  onTap: () {
-                                    setState(() => _selectedScheduleTabIndex = 2);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => Repeated()),
-                                    );
-                                  },
-                                ),
-                              ],
+                          // 3. Non-scrolling Row of 3 Schedule Cards (1.png, 2.jpg, 3.png)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: SizedBox(
+                              height: 136,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildScheduleCard(
+                                      imagePath: 'assets/images/1.png',
+                                      title: 'Prayer Timings',
+                                      isSelected: _selectedScheduleTabIndex == 0,
+                                      onTap: () async {
+                                        setState(() => _selectedScheduleTabIndex = 0);
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const CreateNemaz()),
+                                        );
+                                        _refreshPrayerTimesAndSlider();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _buildScheduleCard(
+                                      imagePath: 'assets/images/2.jpg',
+                                      title: 'One Time',
+                                      isSelected: _selectedScheduleTabIndex == 1,
+                                      onTap: () async {
+                                        setState(() => _selectedScheduleTabIndex = 1);
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => const OneTime()),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _buildScheduleCard(
+                                      imagePath: 'assets/images/3.png',
+                                      title: 'Meetings',
+                                      isSelected: _selectedScheduleTabIndex == 2,
+                                      onTap: () {
+                                        setState(() => _selectedScheduleTabIndex = 2);
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => Repeated()),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
 
@@ -1548,16 +1571,10 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                 ],
               ),
             ),
-
-            // 5. Bottom Quick Silent Bar with Raised Floating Action Button (+)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _buildBottomQuickSilentWithFab(),
-            ),
           ],
         ),
+        floatingActionButton: _buildHomeFab(),
+        bottomNavigationBar: _buildBottomQuickSilentBar(),
       ),
     );
   }
@@ -1582,14 +1599,14 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
       height: 146,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: _prayerBannerGradient,
+        gradient: LinearGradient(
+          colors: _prayerGradients[safeIndex],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.kPrimary.withOpacity(0.35),
+            color: _prayerGradientsGlow[safeIndex].withOpacity(0.38),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -1734,10 +1751,10 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1753,8 +1770,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 116,
-        margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        margin: const EdgeInsets.symmetric(vertical: 3),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -1774,7 +1790,7 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(7.0),
+                padding: const EdgeInsets.all(6.0),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Image.asset(
@@ -1786,14 +1802,18 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 8.0, top: 2.0),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
+              padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
                 ),
               ),
             ),
@@ -2102,109 +2122,103 @@ class _TabBarDemoState extends State<TabBarDemo> with WidgetsBindingObserver {
     );
   }
 
-  // Bottom Quick Silent Bar + Raised Floating Action Button (+) with Banner Ad & Zero Overflow
-  Widget _buildBottomQuickSilentWithFab() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // 1. Floating Action Button (+) raised smoothly above Quick Silent card
-        Padding(
-          padding: const EdgeInsets.only(right: 20, bottom: 12),
-          child: Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              onTap: _openCreateBottomSheet,
-              customBorder: const CircleBorder(),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.kPrimary.withOpacity(0.38),
-                      blurRadius: 12,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // 2. Bottom Rounded Sheet with SafeArea to prevent OS navigation bar overflow
-        Container(
-          width: double.infinity,
+  // Raised Floating Action Button (+) positioned cleanly above bottomNavigationBar
+  Widget _buildHomeFab() {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: _openCreateBottomSheet,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            gradient: const LinearGradient(
+              colors: [AppColors.kPrimary, AppColors.kPrimaryLight],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
             boxShadow: [
               BoxShadow(
-                color: AppColors.kPrimary.withOpacity(0.08),
-                blurRadius: 18,
-                offset: const Offset(0, -4),
+                color: AppColors.kPrimary.withOpacity(0.38),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Quick Silent',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E1B2E),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      _buildQuickSilentPill(label: '5 Min', minutes: 5),
-                      const SizedBox(width: 8),
-                      _buildQuickSilentPill(label: '10 Min', minutes: 10),
-                      const SizedBox(width: 8),
-                      _buildQuickSilentPill(label: '1 Hour', minutes: 60),
-                      const SizedBox(width: 8),
-                      _buildQuickSilentPill(label: '2 Hour', minutes: 120),
-                    ],
-                  ),
-                  // AdMob Banner Ad (ca-app-pub-9923979057032791/3153557586)
-                  if (_isAdLoaded && _bannerAd != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      alignment: Alignment.center,
-                      width: _bannerAd!.size.width.toDouble(),
-                      height: _bannerAd!.size.height.toDouble(),
-                      child: AdWidget(ad: _bannerAd!),
-                    ),
-                  ],
-                ],
-              ),
+          child: const Center(
+            child: Icon(
+              Icons.add,
+              color: Colors.white,
+              size: 28,
             ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  // Bottom Quick Silent Bar + Banner Ad pinned safely above mobile navigation buttons
+  Widget _buildBottomQuickSilentBar() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.kPrimary.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        maintainBottomViewPadding: true,
+        minimum: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Quick Silent',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E1B2E),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildQuickSilentPill(label: '5 Min', minutes: 5),
+                  const SizedBox(width: 8),
+                  _buildQuickSilentPill(label: '10 Min', minutes: 10),
+                  const SizedBox(width: 8),
+                  _buildQuickSilentPill(label: '1 Hour', minutes: 60),
+                  const SizedBox(width: 8),
+                  _buildQuickSilentPill(label: '2 Hour', minutes: 120),
+                ],
+              ),
+              // AdMob Banner Ad (ca-app-pub-9923979057032791/3153557586)
+              if (_isAdLoaded && _bannerAd != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2617,15 +2631,17 @@ class _TopMintCurvePainter extends CustomPainter {
   final int prayerIndex;
   _TopMintCurvePainter({this.prayerIndex = 1});
 
-  static const List<Color> _curveColors = [
-    Color(0xFFE6DCF5),
-    Color(0xFFF1EBF9),
-    AppColors.kbg,
+  static const List<List<Color>> _curveGradients = [
+    [Color(0xFFE2E8F0), Color(0xFFCBD5E1), Colors.white], // Fajr
+    [Color(0xFFEDE7F6), Color(0xFFD1C4E9), Colors.white], // Zohar (Brand Purple tint)
+    [Color(0xFFFEF3C7), Color(0xFFFDE68A), Colors.white], // Asr
+    [Color(0xFFF3E8FF), Color(0xFFE9D5FF), Colors.white], // Maghrib
+    [Color(0xFFE0E7FF), Color(0xFFC7D2FE), Colors.white], // Isha
   ];
 
   @override
   void paint(Canvas canvas, Size size) {
-    final colors = _curveColors;
+    final colors = _curveGradients[prayerIndex.clamp(0, 4)];
     final paint = Paint()
       ..shader = LinearGradient(
         colors: colors,
@@ -2649,10 +2665,11 @@ class _TopMintCurvePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TopMintCurvePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _TopMintCurvePainter oldDelegate) =>
+      oldDelegate.prayerIndex != prayerIndex;
 }
 
-// Custom Painter for Mosque vector silhouette, Sun/Moon, and Stars inside Prayer banner card
+// Professional Multi-Architecture Mosque Painter (Distinct Masjid Design & Celestial Sky per Prayer)
 class _MosqueArtPainter extends CustomPainter {
   final int prayerIndex;
   _MosqueArtPainter({this.prayerIndex = 1});
@@ -2662,114 +2679,301 @@ class _MosqueArtPainter extends CustomPainter {
     final rightBase = size.width;
     final bottom = size.height;
 
-    // 1. Celestial Bodies & Atmosphere per Prayer
-    if (prayerIndex == 0) {
-      // Fajr: Morning star (Venus) & early dawn crescent & soft dawn horizon
-      final starCenter = Offset(rightBase - 48, 28);
-      _drawTwinklingStar(canvas, starCenter, 7, Colors.white.withOpacity(0.9));
-      _drawCrescentMoon(canvas, Offset(rightBase - 85, 32), 10, Colors.white.withOpacity(0.7));
-
-      final dawnGlow = Paint()
-        ..shader = LinearGradient(
-          colors: [AppColors.kPrimaryGlow.withOpacity(0.24), Colors.transparent],
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-        ).createShader(Rect.fromLTWH(0, bottom - 60, size.width, 60));
-      canvas.drawRect(Rect.fromLTWH(0, bottom - 60, size.width, 60), dawnGlow);
-    } else if (prayerIndex == 1) {
-      // Zohar: High overhead sun with bright radiant aura
-      final sunCenter = Offset(rightBase - 65, 34);
-      final sunGlow = Paint()
-        ..color = const Color(0xFFFFF19E).withOpacity(0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26);
-      canvas.drawCircle(sunCenter, 32, sunGlow);
-
-      final sunCore = Paint()..color = const Color(0xFFFFFBEB).withOpacity(0.7);
-      canvas.drawCircle(sunCenter, 14, sunCore);
-    } else if (prayerIndex == 2) {
-      // Asr: Warm golden afternoon sun descending on right
-      final sunCenter = Offset(rightBase - 60, 48);
-      final sunGlow = Paint()
-        ..color = AppColors.kPrimaryGlow.withOpacity(0.4)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28);
-      canvas.drawCircle(sunCenter, 34, sunGlow);
-
-      final sunCore = Paint()..color = const Color(0xFFFEF3C7).withOpacity(0.85);
-      canvas.drawCircle(sunCenter, 16, sunCore);
-    } else if (prayerIndex == 3) {
-      // Maghrib: Sunset dusk horizon glow and evening star
-      final sunsetGlow = Paint()
-        ..shader = LinearGradient(
-          colors: [AppColors.kPrimaryGlow.withOpacity(0.3), Colors.transparent],
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-        ).createShader(Rect.fromLTWH(0, bottom - 65, size.width, 65));
-      canvas.drawRect(Rect.fromLTWH(0, bottom - 65, size.width, 65), sunsetGlow);
-
-      _drawTwinklingStar(canvas, Offset(rightBase - 50, 24), 6, Colors.white.withOpacity(0.85));
-      _drawTwinklingStar(canvas, Offset(rightBase - 90, 42), 4, Colors.white.withOpacity(0.65));
-    } else {
-      // Isha: Night celestial sky with glowing crescent moon and twinkling stars
-      final moonCenter = Offset(rightBase - 55, 32);
-      _drawCrescentMoon(canvas, moonCenter, 13, Colors.white.withOpacity(0.92));
-      _drawTwinklingStar(canvas, Offset(rightBase - 88, 22), 5, Colors.white.withOpacity(0.8));
-      _drawTwinklingStar(canvas, Offset(rightBase - 30, 52), 4, Colors.white.withOpacity(0.7));
-      _drawTwinklingStar(canvas, Offset(rightBase - 110, 48), 3.5, Colors.white.withOpacity(0.6));
-    }
-
-    // 2. Architectural Mosque Outlines & Silhouettes
-    final linePaint = Paint()
-      ..color = Colors.white.withOpacity(0.38)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-
-    final fillPaint = Paint()
-      ..color = Colors.white.withOpacity(0.09)
+    final fillSoft = Paint()
+      ..color = Colors.white.withOpacity(0.10)
       ..style = PaintingStyle.fill;
 
-    // Central Dome
-    final domeRect = Rect.fromCenter(
-      center: Offset(rightBase - 70, bottom - 30),
-      width: 54,
-      height: 56,
+    final fillMid = Paint()
+      ..color = Colors.white.withOpacity(0.16)
+      ..style = PaintingStyle.fill;
+
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.42)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+
+    final archCut = Paint()
+      ..color = AppColors.kPrimaryDark.withOpacity(0.45)
+      ..style = PaintingStyle.fill;
+
+    // 1. Celestial Sky + Distinct Mosque Architecture per Prayer
+    switch (prayerIndex % 5) {
+      case 0:
+        // FAJR: Dawn crescent + morning star + Twin-Minaret Nabawi-inspired Masjid
+        _drawCrescentMoon(canvas, Offset(rightBase - 96, 28), 9.5, Colors.white.withOpacity(0.85));
+        _drawTwinklingStar(canvas, Offset(rightBase - 46, 24), 5.5, Colors.white.withOpacity(0.9));
+        _drawTwinklingStar(canvas, Offset(rightBase - 68, 40), 3.0, Colors.white.withOpacity(0.6));
+
+        // Flanking low domes
+        _drawDome(canvas, rightBase - 116, bottom - 26, 30, 28, fillSoft, linePaint);
+        _drawDome(canvas, rightBase - 32, bottom - 26, 30, 28, fillSoft, linePaint);
+
+        // Grand central dome + finial
+        _drawDome(canvas, rightBase - 74, bottom - 30, 56, 52, fillMid, linePaint, withFinial: true);
+
+        // Twin tiered minarets
+        _drawTieredMinaret(canvas, rightBase - 120, bottom, 10, 88, fillMid, linePaint);
+        _drawTieredMinaret(canvas, rightBase - 38, bottom, 10, 88, fillMid, linePaint);
+
+        // Base arcade & 5 arches
+        _drawArcadeWall(canvas, rightBase - 124, bottom, 104, 30, 5, fillMid, linePaint, archCut);
+        break;
+
+      case 1:
+        // ZOHAR: High radiant sun + Modern Faisal-Mosque inspired geometric canopy & 4 pencil minarets
+        final sunCenter = Offset(rightBase - 72, 30);
+        canvas.drawCircle(
+          sunCenter,
+          26,
+          Paint()
+            ..color = Colors.white.withOpacity(0.18)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+        );
+        canvas.drawCircle(sunCenter, 11, Paint()..color = Colors.white.withOpacity(0.75));
+
+        // 4 sleek pencil minarets
+        _drawPencilMinaret(canvas, rightBase - 126, bottom, 6.5, 96, fillMid, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 104, bottom, 6.5, 82, fillSoft, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 40, bottom, 6.5, 82, fillSoft, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 20, bottom, 6.5, 96, fillMid, linePaint);
+
+        // Iconic triangular tent sanctuary
+        final tent = Path()
+          ..moveTo(rightBase - 114, bottom - 18)
+          ..lineTo(rightBase - 70, bottom - 76)
+          ..lineTo(rightBase - 26, bottom - 18)
+          ..close();
+        canvas.drawPath(tent, fillMid);
+        canvas.drawPath(tent, linePaint);
+
+        // Inner geometric ridge lines
+        canvas.drawLine(Offset(rightBase - 70, bottom - 76), Offset(rightBase - 70, bottom - 18), linePaint);
+        canvas.drawLine(Offset(rightBase - 70, bottom - 76), Offset(rightBase - 90, bottom - 18), linePaint);
+        canvas.drawLine(Offset(rightBase - 70, bottom - 76), Offset(rightBase - 50, bottom - 18), linePaint);
+
+        // Stepped courtyard plinth
+        canvas.drawRect(Rect.fromLTWH(rightBase - 130, bottom - 18, 120, 18), fillMid);
+        canvas.drawRect(Rect.fromLTWH(rightBase - 130, bottom - 18, 120, 18), linePaint);
+        break;
+
+      case 2:
+        // ASR: Descending sun + Ottoman cascading multi-dome Blue-Mosque style
+        final asrSun = Offset(rightBase - 42, 40);
+        canvas.drawCircle(
+          asrSun,
+          24,
+          Paint()
+            ..color = Colors.white.withOpacity(0.16)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+        );
+        canvas.drawCircle(asrSun, 10, Paint()..color = Colors.white.withOpacity(0.68));
+
+        // 4 classic Ottoman minarets
+        _drawPencilMinaret(canvas, rightBase - 128, bottom, 7, 94, fillSoft, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 108, bottom, 8, 104, fillMid, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 42, bottom, 8, 104, fillMid, linePaint);
+        _drawPencilMinaret(canvas, rightBase - 20, bottom, 7, 94, fillSoft, linePaint);
+
+        // Stepped semi-domes + grand central dome
+        _drawDome(canvas, rightBase - 96, bottom - 26, 36, 36, fillSoft, linePaint);
+        _drawDome(canvas, rightBase - 48, bottom - 26, 36, 36, fillSoft, linePaint);
+        _drawDome(canvas, rightBase - 72, bottom - 34, 54, 54, fillMid, linePaint, withFinial: true);
+
+        _drawArcadeWall(canvas, rightBase - 122, bottom, 102, 28, 5, fillMid, linePaint, archCut);
+        break;
+
+      case 3:
+        // MAGHRIB: Sunset glow + evening stars + Mughal 3-dome Badshahi style
+        final sunsetGlow = Paint()
+          ..shader = LinearGradient(
+            colors: [AppColors.kPrimaryGlow.withOpacity(0.28), Colors.transparent],
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+          ).createShader(Rect.fromLTWH(0, bottom - 65, size.width, 65));
+        canvas.drawRect(Rect.fromLTWH(0, bottom - 65, size.width, 65), sunsetGlow);
+
+        _drawTwinklingStar(canvas, Offset(rightBase - 48, 24), 5.5, Colors.white.withOpacity(0.85));
+        _drawTwinklingStar(canvas, Offset(rightBase - 96, 36), 3.8, Colors.white.withOpacity(0.65));
+
+        // Twin Mughal corner minarets with cupolas
+        _drawTieredMinaret(canvas, rightBase - 124, bottom, 10, 92, fillMid, linePaint);
+        _drawTieredMinaret(canvas, rightBase - 28, bottom, 10, 92, fillMid, linePaint);
+
+        // Side onion domes + grand central onion dome
+        _drawOnionDome(canvas, rightBase - 98, bottom - 30, 28, 34, fillSoft, linePaint);
+        _drawOnionDome(canvas, rightBase - 46, bottom - 30, 28, 34, fillSoft, linePaint);
+        _drawOnionDome(canvas, rightBase - 72, bottom - 32, 46, 54, fillMid, linePaint, withFinial: true);
+
+        // Mughal facade with grand center pishtaq arch
+        _drawArcadeWall(canvas, rightBase - 122, bottom, 102, 32, 3, fillMid, linePaint, archCut);
+        break;
+
+      default:
+        // ISHA: Celestial night moon & stars + Grand multi-dome Sheikh Zayed style
+        _drawCrescentMoon(canvas, Offset(rightBase - 54, 28), 11.5, Colors.white.withOpacity(0.92));
+        _drawTwinklingStar(canvas, Offset(rightBase - 92, 22), 4.5, Colors.white.withOpacity(0.85));
+        _drawTwinklingStar(canvas, Offset(rightBase - 26, 46), 3.8, Colors.white.withOpacity(0.75));
+        _drawTwinklingStar(canvas, Offset(rightBase - 114, 42), 3.2, Colors.white.withOpacity(0.65));
+
+        // Outer small domes
+        _drawDome(canvas, rightBase - 122, bottom - 26, 26, 26, fillSoft, linePaint);
+        _drawDome(canvas, rightBase - 22, bottom - 26, 26, 26, fillSoft, linePaint);
+
+        // Inner medium domes
+        _drawDome(canvas, rightBase - 98, bottom - 28, 34, 34, fillSoft, linePaint);
+        _drawDome(canvas, rightBase - 46, bottom - 28, 34, 34, fillSoft, linePaint);
+
+        // Grand central dome
+        _drawDome(canvas, rightBase - 72, bottom - 30, 54, 52, fillMid, linePaint, withFinial: true);
+
+        // Ornate flanking minarets
+        _drawTieredMinaret(canvas, rightBase - 118, bottom, 9.5, 92, fillMid, linePaint);
+        _drawTieredMinaret(canvas, rightBase - 34, bottom, 9.5, 92, fillMid, linePaint);
+
+        _drawArcadeWall(canvas, rightBase - 128, bottom, 114, 28, 6, fillMid, linePaint, archCut);
+        break;
+    }
+  }
+
+  void _drawDome(
+    Canvas canvas,
+    double cx,
+    double baseY,
+    double w,
+    double h,
+    Paint fill,
+    Paint stroke, {
+    bool withFinial = false,
+  }) {
+    final rect = Rect.fromCenter(center: Offset(cx, baseY), width: w, height: h);
+    canvas.drawArc(rect, math.pi, math.pi, true, fill);
+    canvas.drawArc(rect, math.pi, math.pi, false, stroke);
+    if (withFinial) {
+      final topY = baseY - (h / 2);
+      canvas.drawLine(Offset(cx, topY), Offset(cx, topY - 12), stroke);
+      canvas.drawCircle(Offset(cx, topY - 14), 2.2, Paint()..color = Colors.white.withOpacity(0.8));
+    }
+  }
+
+  void _drawOnionDome(
+    Canvas canvas,
+    double cx,
+    double baseY,
+    double w,
+    double h,
+    Paint fill,
+    Paint stroke, {
+    bool withFinial = false,
+  }) {
+    final r = w / 2;
+    final path = Path()
+      ..moveTo(cx - r * 0.78, baseY)
+      ..cubicTo(cx - r * 1.15, baseY - h * 0.35, cx - r * 0.9, baseY - h * 0.72, cx, baseY - h)
+      ..cubicTo(cx + r * 0.9, baseY - h * 0.72, cx + r * 1.15, baseY - h * 0.35, cx + r * 0.78, baseY)
+      ..close();
+    canvas.drawPath(path, fill);
+    canvas.drawPath(path, stroke);
+    if (withFinial) {
+      final topY = baseY - h;
+      canvas.drawLine(Offset(cx, topY), Offset(cx, topY - 11), stroke);
+      canvas.drawCircle(Offset(cx, topY - 13), 2.2, Paint()..color = Colors.white.withOpacity(0.8));
+    }
+  }
+
+  void _drawTieredMinaret(
+    Canvas canvas,
+    double x,
+    double bottom,
+    double w,
+    double totalH,
+    Paint fill,
+    Paint stroke,
+  ) {
+    final spireH = 18.0;
+    final shaftH = totalH - spireH;
+    final shaftRect = Rect.fromLTWH(x, bottom - shaftH, w, shaftH);
+    canvas.drawRect(shaftRect, fill);
+    canvas.drawRect(shaftRect, stroke);
+
+    // Dual balconies
+    for (final ratio in [0.68, 0.96]) {
+      final balRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x - 2.5, bottom - shaftH * ratio, w + 5, 3.5),
+        const Radius.circular(1.5),
+      );
+      canvas.drawRRect(balRect, fill);
+      canvas.drawRRect(balRect, stroke);
+    }
+
+    // Pointed spire + finial
+    final spire = Path()
+      ..moveTo(x - 1, bottom - shaftH)
+      ..lineTo(x + w / 2, bottom - totalH)
+      ..lineTo(x + w + 1, bottom - shaftH)
+      ..close();
+    canvas.drawPath(spire, fill);
+    canvas.drawPath(spire, stroke);
+    canvas.drawCircle(Offset(x + w / 2, bottom - totalH - 2), 1.8, Paint()..color = Colors.white.withOpacity(0.8));
+  }
+
+  void _drawPencilMinaret(
+    Canvas canvas,
+    double x,
+    double bottom,
+    double w,
+    double totalH,
+    Paint fill,
+    Paint stroke,
+  ) {
+    final spireH = 20.0;
+    final shaftH = totalH - spireH;
+    final shaftRect = Rect.fromLTWH(x, bottom - shaftH, w, shaftH);
+    canvas.drawRect(shaftRect, fill);
+    canvas.drawRect(shaftRect, stroke);
+
+    final balRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(x - 2, bottom - shaftH, w + 4, 3),
+      const Radius.circular(1.5),
     );
-    canvas.drawArc(domeRect, 3.14, 3.14, false, linePaint);
-    canvas.drawArc(domeRect, 3.14, 3.14, false, fillPaint);
+    canvas.drawRRect(balRect, fill);
+    canvas.drawRRect(balRect, stroke);
 
-    // Minaret 1 (Left of dome)
-    final minaret1X = rightBase - 105;
-    canvas.drawRect(Rect.fromLTWH(minaret1X, bottom - 85, 12, 85), fillPaint);
-    canvas.drawRect(Rect.fromLTWH(minaret1X, bottom - 85, 12, 85), linePaint);
-    final spire1 = Path()
-      ..moveTo(minaret1X - 2, bottom - 85)
-      ..lineTo(minaret1X + 6, bottom - 104)
-      ..lineTo(minaret1X + 14, bottom - 85)
+    final spire = Path()
+      ..moveTo(x, bottom - shaftH)
+      ..lineTo(x + w / 2, bottom - totalH)
+      ..lineTo(x + w, bottom - shaftH)
       ..close();
-    canvas.drawPath(spire1, linePaint);
+    canvas.drawPath(spire, fill);
+    canvas.drawPath(spire, stroke);
+  }
 
-    // Minaret 2 (Right of dome)
-    final minaret2X = rightBase - 28;
-    canvas.drawRect(Rect.fromLTWH(minaret2X, bottom - 85, 12, 85), fillPaint);
-    canvas.drawRect(Rect.fromLTWH(minaret2X, bottom - 85, 12, 85), linePaint);
-    final spire2 = Path()
-      ..moveTo(minaret2X - 2, bottom - 85)
-      ..lineTo(minaret2X + 6, bottom - 104)
-      ..lineTo(minaret2X + 14, bottom - 85)
-      ..close();
-    canvas.drawPath(spire2, linePaint);
+  void _drawArcadeWall(
+    Canvas canvas,
+    double startX,
+    double bottom,
+    double width,
+    double height,
+    int archCount,
+    Paint fill,
+    Paint stroke,
+    Paint archCut,
+  ) {
+    final wallRect = Rect.fromLTWH(startX, bottom - height, width, height);
+    canvas.drawRect(wallRect, fill);
+    canvas.drawRect(wallRect, stroke);
 
-    // Mosque wall & arches
-    final wallRect = Rect.fromLTWH(minaret1X, bottom - 32, 90, 32);
-    canvas.drawRect(wallRect, linePaint);
-
-    for (int i = 0; i < 4; i++) {
-      final archX = minaret1X + 10 + (i * 18.0);
+    final step = width / archCount;
+    final archW = math.min(11.0, step * 0.52);
+    for (int i = 0; i < archCount; i++) {
+      final archX = startX + (step * i) + (step - archW) / 2;
       final archPath = Path()
         ..moveTo(archX, bottom)
-        ..lineTo(archX, bottom - 14)
-        ..arcToPoint(Offset(archX + 10, bottom - 14), radius: const Radius.circular(5))
-        ..lineTo(archX + 10, bottom);
-      canvas.drawPath(archPath, linePaint);
+        ..lineTo(archX, bottom - height * 0.45)
+        ..arcToPoint(Offset(archX + archW, bottom - height * 0.45), radius: Radius.circular(archW / 2))
+        ..lineTo(archX + archW, bottom)
+        ..close();
+      canvas.drawPath(archPath, archCut);
+      canvas.drawPath(archPath, stroke);
     }
   }
 
